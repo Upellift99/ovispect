@@ -13,7 +13,7 @@ repos:
         args: ["--fix=lf"]
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.5.7
+    rev: v0.15.12
     hooks:
       - id: ruff
         args: ["--fix"]
@@ -29,6 +29,7 @@ repos:
           - pydantic>=2.6
           - pydantic-settings>=2.2
           - jinja2>=3.1
+          - uvicorn>=0.29
         files: ^src/ovispect/
 
   - repo: https://github.com/hadolint/hadolint

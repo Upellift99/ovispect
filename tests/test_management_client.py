@@ -88,9 +88,9 @@ def test_query_management_sends_password_when_configured(patch_socket) -> None: 
     )
     patch_socket(fake)
 
-    query_management("127.0.0.1", 5555, password="hunter2")
+    query_management("127.0.0.1", 5555, password="hunter2")  # pragma: allowlist secret
 
-    assert b"hunter2\n" in fake.sent
+    assert b"hunter2\n" in fake.sent  # pragma: allowlist secret
 
 
 def test_query_management_raises_on_auth_failure(patch_socket) -> None:  # type: ignore[no-untyped-def]
@@ -103,7 +103,7 @@ def test_query_management_raises_on_auth_failure(patch_socket) -> None:  # type:
     patch_socket(fake)
 
     with pytest.raises(ManagementError, match="authentication failed"):
-        query_management("127.0.0.1", 5555, password="wrong")
+        query_management("127.0.0.1", 5555, password="wrong")  # pragma: allowlist secret
 
 
 def test_query_management_raises_when_connection_refused() -> None:
