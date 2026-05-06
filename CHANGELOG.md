@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-05-06
+
+### Added
+
+- Inline clear (`✕`) button on the search input, visible only while the
+  field has content. Pressing `Esc` clears the field too. The native
+  WebKit cancel cross is hidden to avoid duplication.
+- Zebra striping on the dashboard table — even rows get a subtle
+  background tint for easier scanning. Hover keeps a stronger highlight.
+
 ## [0.3.0] - 2026-05-06
 
 ### Added
@@ -125,7 +135,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Test suite (41 tests) covering parser, formatting helpers, and HTTP
   routes via FastAPI's `TestClient`.
 
-[Unreleased]: https://github.com/Upellift99/ovispect/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/Upellift99/ovispect/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/Upellift99/ovispect/releases/tag/v0.3.1
 [0.3.0]: https://github.com/Upellift99/ovispect/releases/tag/v0.3.0
 [0.2.2]: https://github.com/Upellift99/ovispect/releases/tag/v0.2.2
 [0.2.1]: https://github.com/Upellift99/ovispect/releases/tag/v0.2.1

@@ -79,7 +79,8 @@
         }
 
         tbody tr { transition: background-color 120ms ease-in-out; }
-        tbody tr:hover { background-color: rgba(23, 23, 23, 0.55); }
+        tbody tr:nth-child(even) { background-color: rgba(23, 23, 23, 0.35); }
+        tbody tr:hover { background-color: rgba(38, 38, 38, 0.7); }
 
         ::selection { background: rgba(74, 222, 128, 0.25); color: #f5f5f5; }
 
@@ -113,6 +114,38 @@
             border-color: rgba(74, 222, 128, 0.45);
             background-color: rgba(23, 23, 23, 0.85);
         }
+        /* Hide the native WebKit cancel cross — we render our own. */
+        #search-input::-webkit-search-cancel-button,
+        #search-input::-webkit-search-decoration {
+            -webkit-appearance: none;
+            appearance: none;
+        }
+
+        .search-clear {
+            position: absolute;
+            right: 6px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 20px;
+            height: 20px;
+            border-radius: 9999px;
+            background: transparent;
+            border: 0;
+            color: #737373;
+            font-size: 16px;
+            line-height: 1;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            transition: color 120ms ease, background-color 120ms ease;
+        }
+        .search-clear:hover {
+            color: #f5f5f5;
+            background-color: rgba(64, 64, 64, 0.6);
+        }
+        .search-clear.hidden { display: none; }
     </style>
 </head>
 <body class="min-h-screen font-mono antialiased">
@@ -163,15 +196,24 @@
     </div>
 
     <div class="mt-6 flex items-center gap-3">
-        <input
-            id="search-input"
-            type="search"
-            placeholder="Filter by name or address…"
-            autocomplete="off"
-            spellcheck="false"
-            class="w-full max-w-sm rounded px-3 py-1.5"
-            aria-label="Filter clients"
-        >
+        <div class="search-wrap relative w-full max-w-sm">
+            <input
+                id="search-input"
+                type="search"
+                placeholder="Filter by name or address…"
+                autocomplete="off"
+                spellcheck="false"
+                class="w-full rounded pl-3 pr-9 py-1.5"
+                aria-label="Filter clients"
+            >
+            <button
+                id="search-clear"
+                type="button"
+                class="search-clear hidden"
+                aria-label="Clear search"
+                tabindex="-1"
+            >&times;</button>
+        </div>
         <span id="filter-stats" class="text-[10px] uppercase tracking-[0.12em] text-neutral-600 tabular"></span>
     </div>
 
@@ -254,8 +296,13 @@
     const errorBanner = document.getElementById('error-banner');
     const errorMessage = document.getElementById('error-message');
     const searchInput = document.getElementById('search-input');
+    const searchClear = document.getElementById('search-clear');
     const filterStats = document.getElementById('filter-stats');
     const sortHeaders = document.querySelectorAll('th[data-sort-key]');
+
+    function syncClearVisibility() {
+        searchClear.classList.toggle('hidden', searchInput.value === '');
+    }
 
     function escapeHtml(value) {
         return String(value)
@@ -427,6 +474,7 @@
 
     let filterTimer = null;
     searchInput.addEventListener('input', () => {
+        syncClearVisibility();
         clearTimeout(filterTimer);
         filterTimer = setTimeout(() => {
             STATE.filter = searchInput.value;
@@ -434,9 +482,25 @@
         }, 80);
     });
 
+    searchClear.addEventListener('click', () => {
+        searchInput.value = '';
+        STATE.filter = '';
+        syncClearVisibility();
+        searchInput.focus();
+        render();
+    });
+
+    searchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && searchInput.value !== '') {
+            e.preventDefault();
+            searchClear.click();
+        }
+    });
+
     fetchSnapshot();
     setInterval(fetchSnapshot, REFRESH_MS);
     renderSortIndicators();
+    syncClearVisibility();
 })();
 </script>
 
