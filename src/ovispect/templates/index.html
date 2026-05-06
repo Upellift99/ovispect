@@ -103,6 +103,14 @@
         }
         tbody tr.is-leaving td { text-decoration: line-through; text-decoration-color: rgba(248, 113, 113, 0.6); }
 
+        .country-flag {
+            display: inline-block;
+            margin-right: 6px;
+            font-size: 13px;
+            line-height: 1;
+            vertical-align: -1px;
+        }
+
         ::selection { background: rgba(74, 222, 128, 0.25); color: #f5f5f5; }
 
         .scroll-x { scrollbar-color: #262626 transparent; scrollbar-width: thin; }
@@ -321,7 +329,7 @@
                         {% for row in rows %}
                         <tr class="border-b border-neutral-900 last:border-b-0">
                             <td class="px-4 py-2.5 text-neutral-100">{{ row.common_name }}</td>
-                            <td class="px-4 py-2.5 text-neutral-300 tabular" title="{{ row.real_address_full }}">{{ row.real_address_short }}</td>
+                            <td class="px-4 py-2.5 text-neutral-300 tabular" title="{{ row.real_address_full }}">{% if row.country_flag %}<span class="country-flag" title="{{ row.country_code }}">{{ row.country_flag }}</span>{% endif %}{{ row.real_address_short }}</td>
                             <td class="px-4 py-2.5 text-neutral-400 tabular">{{ row.virtual_address }}</td>
                             <td class="px-4 py-2.5 text-right text-neutral-200 tabular">{{ row.bytes_received_human }}</td>
                             <td class="px-4 py-2.5 text-right text-neutral-200 tabular">{{ row.bytes_sent_human }}</td>
@@ -354,8 +362,15 @@
         </div>
     </section>
 
-    <footer class="mt-8 flex items-center justify-between text-[10px] uppercase tracking-[0.12em] text-neutral-700">
+    <footer class="mt-8 flex items-center justify-between gap-4 flex-wrap text-[10px] uppercase tracking-[0.12em] text-neutral-700">
         <span>ovispect v{{ version }}</span>
+        {% if geoip_attribution %}
+        <span class="normal-case tracking-normal">
+            IP-to-country data by
+            <a href="https://db-ip.com" target="_blank" rel="noopener" class="hover:text-neutral-500 underline">DB-IP.com</a>
+            (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener" class="hover:text-neutral-500 underline">CC-BY-4.0</a>)
+        </span>
+        {% endif %}
         <span>auto-refresh {{ refresh_seconds }}s</span>
     </footer>
 
@@ -510,10 +525,13 @@
             if (c._isNew) flags.push('is-new');
             if (c._isLeaving) flags.push('is-leaving');
             const cls = ['border-b', 'border-neutral-900', 'last:border-b-0', ...flags].join(' ');
+            const flag = c.country_flag
+                ? `<span class="country-flag" title="${escapeHtml(c.country_code || '')}">${escapeHtml(c.country_flag)}</span>`
+                : '';
             return `
             <tr class="${cls}" data-row-key="${escapeHtml(keyOf(c))}">
                 <td class="px-4 py-2.5 text-neutral-100">${escapeHtml(c.common_name)}</td>
-                <td class="px-4 py-2.5 text-neutral-300 tabular" title="${escapeHtml(c.real_address_full)}">${escapeHtml(c.real_address_short)}</td>
+                <td class="px-4 py-2.5 text-neutral-300 tabular" title="${escapeHtml(c.real_address_full)}">${flag}${escapeHtml(c.real_address_short)}</td>
                 <td class="px-4 py-2.5 text-neutral-400 tabular">${escapeHtml(c.virtual_address)}</td>
                 <td class="px-4 py-2.5 text-right text-neutral-200 tabular">${escapeHtml(c.bytes_received_human)}</td>
                 <td class="px-4 py-2.5 text-right text-neutral-200 tabular">${escapeHtml(c.bytes_sent_human)}</td>
@@ -644,9 +662,13 @@
         const ipv6 = c.virtual_ipv6_address && c.virtual_ipv6_address !== ''
             ? c.virtual_ipv6_address
             : null;
+        const country = c.country_code
+            ? `${c.country_flag ? c.country_flag + ' ' : ''}${c.country_code}`
+            : null;
         const fields = [
             ['Username', c.username && c.username !== 'UNDEF' ? c.username : null],
             ['Real address', c.real_address_full],
+            ['Country', country],
             ['Virtual IPv4', c.virtual_address && c.virtual_address !== '—' ? c.virtual_address : null],
             ['Virtual IPv6', ipv6],
             ['RX (bytes)', `${c.bytes_received_human}  (${c.bytes_received.toLocaleString()})`],

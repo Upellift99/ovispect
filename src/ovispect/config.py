@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal, Self
 
 from pydantic import Field, SecretStr, model_validator
@@ -60,6 +61,14 @@ class Settings(BaseSettings):
         ge=0.5,
         le=60.0,
         description="Socket timeout when talking to the management interface.",
+    )
+
+    geoip_database_path: Path | None = Field(
+        default=Path("/opt/geo/dbip-country-lite.csv.gz"),
+        description=(
+            "Path to a db-ip.com Lite Country CSV (optionally .gz). When the"
+            " file is absent the country lookup is silently disabled."
+        ),
     )
 
     auth_username: str = Field(

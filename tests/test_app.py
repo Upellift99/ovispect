@@ -3,15 +3,27 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 
 from ovispect import app as app_module
+from ovispect import geo
 from ovispect.config import Settings
 from ovispect.ovpn import Client, StatusSnapshot
 from tests.conftest import PLAIN_PASSWORD
+
+GEO_FIXTURE = Path(__file__).parent / "fixtures" / "dbip-country-lite-sample.csv"
+
+
+@pytest.fixture(autouse=True)
+def _reset_geo() -> None:
+    """Tests must not leak the geo database singleton between cases."""
+    geo.reset_cache()
+    yield
+    geo.reset_cache()
 
 
 def _make_settings(**overrides: Any) -> Settings:
@@ -110,6 +122,50 @@ def test_api_clients_returns_json_payload(client_factory) -> None:  # type: igno
     assert row["client_id"] == "1"
     assert row["peer_id"] == "0"
     assert row["data_channel_cipher"] == "AES-256-GCM"
+    # Country fields are present even when no GeoIP DB is configured.
+    assert "country_code" in row
+    assert "country_flag" in row
+    assert row["country_code"] is None
+    assert row["country_flag"] == ""
+
+
+def test_api_clients_resolves_country_when_geoip_db_loaded(  # type: ignore[no-untyped-def]
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When a GeoIP DB is configured the /api/clients payload includes
+    a country code + flag for each public IP found in the DB."""
+
+    def _make_with_geo(snapshot: StatusSnapshot) -> TestClient:
+        def _fake(*_args: Any, **_kwargs: Any) -> StatusSnapshot:
+            return snapshot
+
+        monkeypatch.setattr(app_module, "fetch_status", _fake)
+        settings = _make_settings(geoip_database_path=GEO_FIXTURE)
+        return TestClient(app_module.create_app(settings))
+
+    snapshot = StatusSnapshot(fetched_at=datetime.now(tz=UTC), clients=_sample_clients())
+    with _make_with_geo(snapshot) as client:
+        response = client.get("/api/clients")
+    assert response.status_code == 200
+    row = response.json()["clients"][0]
+    # The fixture maps 203.0.113.0/24 → FR.
+    assert row["country_code"] == "FR"
+    assert row["country_flag"] == "🇫🇷"
+
+
+def test_index_renders_country_flag_when_geoip_db_loaded(  # type: ignore[no-untyped-def]
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _fake(*_args: Any, **_kwargs: Any) -> StatusSnapshot:
+        return StatusSnapshot(fetched_at=datetime.now(tz=UTC), clients=_sample_clients())
+
+    monkeypatch.setattr(app_module, "fetch_status", _fake)
+    settings = _make_settings(geoip_database_path=GEO_FIXTURE)
+    with TestClient(app_module.create_app(settings)) as client:
+        body = client.get("/").text
+    assert "🇫🇷" in body
+    # Attribution footer appears.
+    assert "DB-IP.com" in body
 
 
 def test_api_clients_reports_error_in_payload(client_factory) -> None:  # type: ignore[no-untyped-def]

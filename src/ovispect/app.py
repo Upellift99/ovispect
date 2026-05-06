@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Any
@@ -40,6 +41,7 @@ from ovispect.formatting import (
     seconds_since,
     strip_port,
 )
+from ovispect.geo import country_flag, extract_ip, get_database
 from ovispect.ovpn import Client, StatusSnapshot, fetch_status
 
 logger = logging.getLogger(__name__)
@@ -56,7 +58,15 @@ def _resolve_timezone(name: str) -> ZoneInfo:
         return ZoneInfo("UTC")
 
 
-def _format_client_row(client: Client, *, now: datetime) -> dict[str, Any]:
+CountryLookup = Callable[[str], str | None]
+
+
+def _format_client_row(
+    client: Client,
+    *,
+    now: datetime,
+    country_lookup: CountryLookup | None = None,
+) -> dict[str, Any]:
     """Serialize a :class:`Client` for the dashboard.
 
     Both raw integers (for client-side sorting) and pre-humanized strings
@@ -64,6 +74,11 @@ def _format_client_row(client: Client, *, now: datetime) -> dict[str, Any]:
     SSR template *and* the JSON API.
     """
     connected_for = seconds_since(client.connected_since_t, now=now)
+    country_code: str | None = None
+    if country_lookup is not None:
+        ip = extract_ip(client.real_address)
+        if ip:
+            country_code = country_lookup(ip)
     return {
         "common_name": client.common_name,
         "real_address_short": strip_port(client.real_address),
@@ -81,6 +96,8 @@ def _format_client_row(client: Client, *, now: datetime) -> dict[str, Any]:
         "client_id": client.client_id,
         "peer_id": client.peer_id,
         "data_channel_cipher": client.data_channel_cipher,
+        "country_code": country_code,
+        "country_flag": country_flag(country_code),
     }
 
 
@@ -89,6 +106,8 @@ def _build_snapshot_payload(settings: Settings, snapshot: StatusSnapshot) -> dic
     tz = _resolve_timezone(settings.timezone)
     now = datetime.now(tz=UTC)
     age_seconds = max(int((now - snapshot.fetched_at).total_seconds()), 0)
+    db = get_database(settings.geoip_database_path)
+    country_lookup: CountryLookup | None = db.lookup if db is not None else None
     return {
         "fetched_at_iso": snapshot.fetched_at.isoformat(),
         "fetched_at_local": format_local_time(snapshot.fetched_at, tz=tz),
@@ -100,7 +119,10 @@ def _build_snapshot_payload(settings: Settings, snapshot: StatusSnapshot) -> dic
         "total_bytes_sent": snapshot.total_bytes_sent,
         "total_bytes_received_human": humanize_bytes(snapshot.total_bytes_received),
         "total_bytes_sent_human": humanize_bytes(snapshot.total_bytes_sent),
-        "clients": [_format_client_row(c, now=now) for c in snapshot.clients],
+        "clients": [
+            _format_client_row(c, now=now, country_lookup=country_lookup)
+            for c in snapshot.clients
+        ],
     }
 
 
@@ -125,6 +147,7 @@ def _build_view_model(
         "total_bytes_received_human": payload["total_bytes_received_human"],
         "total_bytes_sent_human": payload["total_bytes_sent_human"],
         "show_logout": auth_enabled,
+        "geoip_attribution": get_database(settings.geoip_database_path) is not None,
     }
 
 

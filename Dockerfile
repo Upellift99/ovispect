@@ -2,6 +2,25 @@
 # Multi-stage build that produces a small, non-root, healthchecked image.
 
 ARG PYTHON_VERSION=3.12-alpine
+# Set to a non-empty value to skip the GeoIP DB download (e.g. for offline
+# builds or air-gapped environments). The country lookup will then be
+# silently disabled at runtime.
+ARG SKIP_GEOIP=
+
+# --- GeoIP country DB (db-ip.com Lite, CC-BY-4.0) -----------------------
+FROM alpine:3.19 AS geoip
+ARG SKIP_GEOIP
+WORKDIR /geoip
+# hadolint ignore=DL3018
+RUN apk add --no-cache curl ca-certificates gzip
+COPY scripts/fetch-geoip.sh ./fetch-geoip.sh
+RUN if [ -z "$SKIP_GEOIP" ]; then \
+        sh ./fetch-geoip.sh; \
+    else \
+        echo "SKIP_GEOIP set — emitting empty (valid) gzip marker" \
+            && printf '' | gzip > dbip-country-lite.csv.gz; \
+    fi
+
 
 FROM python:${PYTHON_VERSION} AS builder
 
@@ -46,6 +65,7 @@ RUN apk add --no-cache wget tini \
 WORKDIR /app
 
 COPY --from=builder /opt/venv /opt/venv
+COPY --from=geoip /geoip/dbip-country-lite.csv.gz /opt/geo/dbip-country-lite.csv.gz
 
 USER ovispect:ovispect
 

@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-05-06
+
+### Added
+
+- **IP-to-country lookup**: a regional-indicator flag and ISO 3166-1
+  alpha-2 code are shown next to each client's real address (and in the
+  drawer). Lookup is backed by [DB-IP.com Lite Country](https://db-ip.com/db/download/ip-to-country-lite)
+  (CC-BY-4.0), bundled in the Docker image so there is no runtime network
+  dependency. Private, loopback and unknown IPs simply render without a
+  flag.
+- New `ovispect.geo` module with `CountryDatabase`, `country_flag`,
+  `extract_ip` helpers and a singleton cache; loads CSV or `.csv.gz`,
+  serves O(log n) lookups via `bisect`.
+- Dockerfile gains a `geoip` build stage that fetches the latest monthly
+  DB from db-ip.com via `scripts/fetch-geoip.sh` (with up-to-three-month
+  fallback for any publication delay). Pass
+  `--build-arg SKIP_GEOIP=1` to disable the download for offline builds.
+- `GEOIP_DATABASE_PATH` setting (default `/opt/geo/dbip-country-lite.csv.gz`)
+  controls the runtime database location; missing/corrupt files
+  gracefully disable the column.
+- Footer displays the DB-IP.com attribution required by CC-BY-4.0
+  whenever the database is loaded.
+
+### Changed
+
+- `/api/clients` payload now includes `country_code` (or `null`) and
+  `country_flag` (or `""`) per client.
+- README updated: feature list, comparison table (now lists GeoIP +
+  Auth as supported) and a third-party-attribution section.
+
 ## [0.4.0] - 2026-05-06
 
 ### Added
@@ -164,7 +194,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Test suite (41 tests) covering parser, formatting helpers, and HTTP
   routes via FastAPI's `TestClient`.
 
-[Unreleased]: https://github.com/Upellift99/ovispect/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/Upellift99/ovispect/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/Upellift99/ovispect/releases/tag/v0.5.0
 [0.4.0]: https://github.com/Upellift99/ovispect/releases/tag/v0.4.0
 [0.3.1]: https://github.com/Upellift99/ovispect/releases/tag/v0.3.1
 [0.3.0]: https://github.com/Upellift99/ovispect/releases/tag/v0.3.0

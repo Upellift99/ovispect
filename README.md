@@ -14,9 +14,11 @@ monitoring suite.
 
 ## Features
 
-- Single binary container, ≤ 70 MB, runs as non-root
+- Single binary container, ≤ 75 MB, runs as non-root
 - Reads OpenVPN's `status 3` (TSV) over the management interface — no log scraping
-- Server-rendered HTML, full-page auto-refresh, no JS framework
+- Modern dashboard: sortable columns, live search, totals row, click-to-drawer
+  per-client details, IP-to-country flag in the table, and live diff
+  highlight when clients connect/disconnect
 - Optional Prometheus exposition (`/metrics`) for ad-hoc scraping
 - 12-factor configuration via environment variables only
 - Strict types (`mypy --strict`), linted with `ruff`, container linted with `hadolint`
@@ -29,7 +31,7 @@ monitoring suite.
 | `ruimarinho/openvpn-monitor`     | 927 MB | no         | dated         | yes   | no   |
 | `samuelkadolph/openvpn-monitor`  | 58 MB  | yes        | same as above | yes   | no   |
 | `kumina/openvpn_exporter` (Prom) | ~15 MB | yes        | none          | no    | no   |
-| **ovispect** (this project)      | ≤70 MB | yes        | modern        | no    | no   |
+| **ovispect** (this project)      | ≤75 MB | yes        | modern        | yes   | yes  |
 
 ovispect targets the *"I bookmarked this, I want a quick clean look"* use
 case. For long-term monitoring, alerting, and historical graphs, pair it with
@@ -187,9 +189,13 @@ services:
     ports: ["8000:8000"]
 ```
 
-GeoIP data is not provided by ovispect on purpose. If you need it, run
-[`maxmind/geoipupdate`](https://github.com/maxmind/geoipupdate) alongside the
-relevant downstream tooling.
+### IP-to-country lookup
+
+A flag and ISO country code are shown next to each client's real address
+when the bundled DB-IP.com Lite database resolves the IP. The dashboard
+silently falls back to no flag when the address is private/loopback or
+when the database is unavailable. See the *License → Third-party data
+attributions* section for details on opting out.
 
 ## Building from source
 
@@ -234,3 +240,13 @@ ovispect is independent from, and not affiliated with, OpenVPN Inc.
 The terminal-style design and feature scope took moral inspiration from
 [`furlongm/openvpn-monitor`](https://github.com/furlongm/openvpn-monitor); no
 code was copied.
+
+### Third-party data attributions
+
+- IP-to-country lookup data is provided by [DB-IP.com](https://db-ip.com)
+  ([IP to Country Lite](https://db-ip.com/db/download/ip-to-country-lite)),
+  distributed under [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/).
+  The database is bundled in the Docker image and refreshed on every
+  release build. To opt out (offline / air-gapped builds, or simply to
+  disable the country column), build with `--build-arg SKIP_GEOIP=1` or
+  unset `GEOIP_DATABASE_PATH` at runtime.
