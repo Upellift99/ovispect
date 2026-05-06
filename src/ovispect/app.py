@@ -1,18 +1,37 @@
-"""FastAPI application: routes, templating, and Prometheus exposition."""
+"""FastAPI application: routes, templating, authentication, and Prometheus."""
 
 from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Response
+from fastapi import Depends, FastAPI, Form, Request
+from fastapi.responses import (
+    HTMLResponse,
+    JSONResponse,
+    PlainTextResponse,
+    RedirectResponse,
+    Response,
+)
 from fastapi.templating import Jinja2Templates
+from starlette.middleware.sessions import SessionMiddleware
 
 from ovispect import __version__
+from ovispect.auth import (
+    LoginRateLimiter,
+    build_login_redirect,
+    clear_session,
+    client_ip,
+    is_auth_enabled,
+    is_authenticated,
+    is_safe_next,
+    mark_authenticated,
+    require_auth_factory,
+    verify_password,
+)
 from ovispect.config import Settings, get_settings
 from ovispect.formatting import (
     format_local_time,
@@ -37,7 +56,12 @@ def _resolve_timezone(name: str) -> ZoneInfo:
         return ZoneInfo("UTC")
 
 
-def _build_view_model(settings: Settings, snapshot: StatusSnapshot) -> dict[str, Any]:
+def _build_view_model(
+    settings: Settings,
+    snapshot: StatusSnapshot,
+    *,
+    auth_enabled: bool,
+) -> dict[str, Any]:
     tz = _resolve_timezone(settings.timezone)
     now = datetime.now(tz=UTC)
     age_seconds = max(int((now - snapshot.fetched_at).total_seconds()), 0)
@@ -71,6 +95,7 @@ def _build_view_model(settings: Settings, snapshot: StatusSnapshot) -> dict[str,
         "error_message": snapshot.error,
         "clients_connected": len(snapshot.clients),
         "rows": rows,
+        "show_logout": auth_enabled,
     }
 
 
@@ -81,6 +106,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     environment variables. Production code calls :func:`get_settings`.
     """
     cfg = settings if settings is not None else get_settings()
+    auth_enabled = is_auth_enabled(cfg)
+
     application = FastAPI(
         title="ovispect",
         description="A lightweight dashboard for OpenVPN's management interface.",
@@ -90,11 +117,29 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         openapi_url=None,
     )
 
+    if auth_enabled:
+        logger.info("Authentication enabled (single-user, bcrypt-hashed password)")
+        application.add_middleware(
+            SessionMiddleware,
+            secret_key=cfg.session_secret.get_secret_value(),
+            session_cookie=cfg.session_cookie_name,
+            max_age=cfg.session_lifetime_seconds,
+            same_site="strict",
+            https_only=cfg.session_cookie_secure,
+        )
+    else:
+        logger.info(
+            "Authentication disabled — relying on upstream reverse proxy for access control"
+        )
+
+    require_auth = require_auth_factory(cfg)
+    rate_limiter = LoginRateLimiter()
+
     @application.get("/healthz", response_class=JSONResponse)
     async def healthz() -> dict[str, bool]:
         return {"ok": True}
 
-    @application.get("/", response_class=HTMLResponse)
+    @application.get("/", response_class=HTMLResponse, dependencies=[Depends(require_auth)])
     async def index(request: Request) -> Response:
         snapshot = fetch_status(
             cfg.openvpn_host,
@@ -102,7 +147,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             password=cfg.openvpn_password.get_secret_value(),
             timeout=cfg.management_timeout_seconds,
         )
-        context = _build_view_model(cfg, snapshot)
+        context = _build_view_model(cfg, snapshot, auth_enabled=auth_enabled)
         return templates.TemplateResponse(request, "index.html", context)
 
     @application.get("/metrics", response_class=PlainTextResponse)
@@ -115,6 +160,77 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
         body = _render_prometheus(snapshot)
         return PlainTextResponse(body, media_type="text/plain; version=0.0.4")
+
+    if not auth_enabled:
+        return application
+
+    @application.get("/login", response_class=HTMLResponse)
+    async def login_form(request: Request, next: str | None = None) -> Response:
+        if is_authenticated(request):
+            return RedirectResponse(url="/", status_code=303)
+        return templates.TemplateResponse(
+            request,
+            "login.html",
+            {
+                "site_name": cfg.site_name,
+                "version": __version__,
+                "next": next if is_safe_next(next) else "",
+                "error": None,
+            },
+        )
+
+    @application.post("/login", response_class=HTMLResponse)
+    async def login_submit(
+        request: Request,
+        username: Annotated[str, Form(...)],
+        password: Annotated[str, Form(...)],
+        next: Annotated[str, Form()] = "",
+    ) -> Response:
+        ip = client_ip(request)
+        decision = rate_limiter.check(ip)
+        if not decision.allowed:
+            retry = decision.retry_after
+            minutes = max(int(retry.total_seconds() // 60) + 1, 1) if retry else 5
+            return templates.TemplateResponse(
+                request,
+                "login.html",
+                {
+                    "site_name": cfg.site_name,
+                    "version": __version__,
+                    "next": next if is_safe_next(next) else "",
+                    "error": (
+                        f"Too many failed attempts. Try again in {minutes} minute"
+                        f"{'s' if minutes != 1 else ''}."
+                    ),
+                },
+                status_code=429,
+            )
+
+        expected_user = cfg.auth_username
+        expected_hash = cfg.auth_password_hash.get_secret_value()
+        if username == expected_user and verify_password(password, expected_hash):
+            rate_limiter.reset(ip)
+            mark_authenticated(request)
+            target = next if is_safe_next(next) else "/"
+            return RedirectResponse(url=target, status_code=303)
+
+        rate_limiter.register_failure(ip)
+        return templates.TemplateResponse(
+            request,
+            "login.html",
+            {
+                "site_name": cfg.site_name,
+                "version": __version__,
+                "next": next if is_safe_next(next) else "",
+                "error": "Invalid credentials.",
+            },
+            status_code=401,
+        )
+
+    @application.post("/logout")
+    async def logout(request: Request) -> Response:
+        clear_session(request)
+        return RedirectResponse(url=build_login_redirect(None), status_code=303)
 
     return application
 

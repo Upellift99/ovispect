@@ -118,6 +118,14 @@
                     <span class="text-neutral-600 uppercase tracking-wider text-[10px]">last fetch</span>
                     <span class="text-neutral-300">{{ fetched_at_local }}</span>
                 </div>
+                {% if show_logout %}
+                <form method="post" action="/logout" class="flex">
+                    <button
+                        type="submit"
+                        class="text-[10px] uppercase tracking-[0.14em] text-neutral-500 hover:text-neutral-300 transition-colors"
+                    >Sign out</button>
+                </form>
+                {% endif %}
             </div>
         </div>
     </header>

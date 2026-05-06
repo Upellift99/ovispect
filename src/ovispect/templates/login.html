@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en" class="bg-neutral-950">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="dark">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Sign in — {{ site_name }}</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=IBM+Plex+Sans:wght@500;600&display=swap" rel="stylesheet">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        mono: ['"IBM Plex Mono"', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+                        sans: ['"IBM Plex Sans"', 'system-ui', 'sans-serif'],
+                    },
+                },
+            },
+        };
+    </script>
+
+    <style>
+        html, body { background-color: #0a0a0a; }
+        body {
+            color: #e5e5e5;
+            font-family: '"IBM Plex Mono"', ui-monospace, monospace;
+            font-feature-settings: "tnum" 1, "calt" 0;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+        .accent-divider {
+            height: 1px;
+            background: linear-gradient(90deg, rgba(74, 222, 128, 0.4) 0%, rgba(74, 222, 128, 0.0) 70%);
+        }
+        .input {
+            background-color: #171717;
+            border: 1px solid #262626;
+            color: #e5e5e5;
+            transition: border-color 120ms ease-in-out, box-shadow 120ms ease-in-out;
+        }
+        .input:focus {
+            outline: none;
+            border-color: rgba(74, 222, 128, 0.6);
+            box-shadow: 0 0 0 3px rgba(74, 222, 128, 0.12);
+        }
+        .input::placeholder { color: #525252; }
+        .submit {
+            background-color: rgba(74, 222, 128, 0.12);
+            color: #4ade80;
+            border: 1px solid rgba(74, 222, 128, 0.4);
+            transition: background-color 120ms ease-in-out, border-color 120ms ease-in-out, color 120ms ease-in-out;
+        }
+        .submit:hover {
+            background-color: rgba(74, 222, 128, 0.22);
+            border-color: rgba(74, 222, 128, 0.6);
+            color: #86efac;
+        }
+        .submit:active { transform: translateY(1px); }
+        .error-banner {
+            animation: fade-in 220ms ease-out both;
+        }
+        @keyframes fade-in {
+            from { opacity: 0; transform: translateY(-2px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center px-4">
+
+<main class="w-full max-w-md">
+
+    <div class="text-center mb-8">
+        <h1 class="font-sans text-2xl font-semibold tracking-tight text-neutral-100">{{ site_name }}</h1>
+        <p class="mt-1 text-xs uppercase tracking-[0.18em] text-neutral-600">OpenVPN status dashboard</p>
+        <div class="accent-divider mt-5 w-24 mx-auto"></div>
+    </div>
+
+    <section class="rounded border border-neutral-800 bg-neutral-950/50 p-6">
+        {% if error %}
+        <div class="error-banner mb-4 rounded border border-red-900/60 bg-red-950/30 px-3 py-2 text-xs text-red-300">
+            {{ error }}
+        </div>
+        {% endif %}
+
+        <form method="post" action="/login" class="space-y-4" autocomplete="off">
+            <input type="hidden" name="next" value="{{ next }}">
+
+            <label class="block">
+                <span class="block text-[10px] uppercase tracking-[0.14em] text-neutral-500 mb-1.5">Username</span>
+                <input
+                    class="input w-full rounded px-4 py-3 text-sm font-mono"
+                    type="text"
+                    name="username"
+                    autocomplete="username"
+                    autofocus
+                    required
+                    spellcheck="false"
+                    autocapitalize="off"
+                >
+            </label>
+
+            <label class="block">
+                <span class="block text-[10px] uppercase tracking-[0.14em] text-neutral-500 mb-1.5">Password</span>
+                <input
+                    class="input w-full rounded px-4 py-3 text-sm font-mono"
+                    type="password"
+                    name="password"
+                    autocomplete="current-password"
+                    required
+                >
+            </label>
+
+            <button type="submit" class="submit w-full rounded px-4 py-3 text-sm font-medium tracking-wide">
+                Sign in
+            </button>
+        </form>
+    </section>
+
+    <footer class="mt-6 flex items-center justify-center text-[10px] uppercase tracking-[0.12em] text-neutral-700">
+        <span>ovispect v{{ version }}</span>
+    </footer>
+
+</main>
+
+</body>
+</html>
