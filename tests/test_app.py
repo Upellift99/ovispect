@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 from ovispect import app as app_module
 from ovispect.config import Settings
 from ovispect.ovpn import Client, StatusSnapshot
+from tests.conftest import PLAIN_PASSWORD
 
 
 def _make_settings(**overrides: Any) -> Settings:
@@ -126,3 +127,118 @@ def test_metrics_reports_down_on_error(client_factory) -> None:  # type: ignore[
         response = client.get("/metrics")
     assert response.status_code == 200
     assert "ovispect_up 0" in response.text
+
+
+# --- Authentication-mode integration tests ---------------------------------
+
+
+def test_index_unauthenticated_serves_dashboard_in_no_auth_mode(client_no_auth) -> None:  # type: ignore[no-untyped-def]
+    response = client_no_auth.get("/")
+    assert response.status_code == 200
+    assert "Test VPN" in response.text
+    assert "Sign out" not in response.text
+
+
+def test_healthz_is_public_in_no_auth_mode(client_no_auth) -> None:  # type: ignore[no-untyped-def]
+    assert client_no_auth.get("/healthz").json() == {"ok": True}
+
+
+def test_index_redirects_to_login_when_unauthenticated(client_with_auth) -> None:  # type: ignore[no-untyped-def]
+    response = client_with_auth.get("/")
+    assert response.status_code == 303
+    assert response.headers["location"].startswith("/login")
+
+
+def test_healthz_remains_public_in_auth_mode(client_with_auth) -> None:  # type: ignore[no-untyped-def]
+    assert client_with_auth.get("/healthz").status_code == 200
+
+
+def test_login_form_renders(client_with_auth) -> None:  # type: ignore[no-untyped-def]
+    response = client_with_auth.get("/login")
+    assert response.status_code == 200
+    assert "Sign in" in response.text
+    assert 'name="password"' in response.text
+
+
+def test_login_submit_with_correct_credentials_sets_session(client_with_auth) -> None:  # type: ignore[no-untyped-def]
+
+    response = client_with_auth.post(
+        "/login",
+        data={"username": "admin", "password": PLAIN_PASSWORD},
+    )
+    assert response.status_code == 303
+    assert response.headers["location"] == "/"
+    assert any(c.startswith("ovispect_session") for c in response.headers.get_list("set-cookie"))
+
+    # Cookie persisted in the client; the dashboard is now reachable.
+    follow = client_with_auth.get("/")
+    assert follow.status_code == 200
+    assert "Sign out" in follow.text
+
+
+def test_login_submit_with_wrong_password_returns_401(client_with_auth) -> None:  # type: ignore[no-untyped-def]
+    response = client_with_auth.post(
+        "/login",
+        data={"username": "admin", "password": "wrong"},
+    )
+    assert response.status_code == 401
+    assert "Invalid credentials" in response.text
+
+
+def test_login_submit_open_redirect_protection(client_with_auth) -> None:  # type: ignore[no-untyped-def]
+
+    response = client_with_auth.post(
+        "/login",
+        data={
+            "username": "admin",
+            "password": PLAIN_PASSWORD,
+            "next": "https://evil.com/steal",
+        },
+    )
+    assert response.status_code == 303
+    assert response.headers["location"] == "/"
+
+
+def test_login_submit_preserves_safe_next(client_with_auth) -> None:  # type: ignore[no-untyped-def]
+
+    response = client_with_auth.post(
+        "/login",
+        data={
+            "username": "admin",
+            "password": PLAIN_PASSWORD,
+            "next": "/metrics",
+        },
+    )
+    assert response.status_code == 303
+    assert response.headers["location"] == "/metrics"
+
+
+def test_logout_clears_session(client_with_auth) -> None:  # type: ignore[no-untyped-def]
+
+    client_with_auth.post(
+        "/login",
+        data={"username": "admin", "password": PLAIN_PASSWORD},
+    )
+    logout = client_with_auth.post("/logout")
+    assert logout.status_code == 303
+    assert logout.headers["location"].startswith("/login")
+
+    after = client_with_auth.get("/")
+    assert after.status_code == 303
+    assert after.headers["location"].startswith("/login")
+
+
+def test_login_rate_limit_blocks_after_repeated_failures(client_with_auth) -> None:  # type: ignore[no-untyped-def]
+    for _ in range(5):
+        response = client_with_auth.post(
+            "/login",
+            data={"username": "admin", "password": "wrong"},
+        )
+        assert response.status_code == 401
+
+    response = client_with_auth.post(
+        "/login",
+        data={"username": "admin", "password": "wrong"},
+    )
+    assert response.status_code == 429
+    assert "Too many failed attempts" in response.text
