@@ -105,6 +105,11 @@ def test_api_clients_returns_json_payload(client_factory) -> None:  # type: igno
     assert row["real_address_short"] == "203.0.113.10"
     assert row["virtual_address"] == "10.8.0.6"
     assert row["connected_for_seconds"] >= 0
+    # Drawer-only fields:
+    assert row["virtual_ipv6_address"] == ""
+    assert row["client_id"] == "1"
+    assert row["peer_id"] == "0"
+    assert row["data_channel_cipher"] == "AES-256-GCM"
 
 
 def test_api_clients_reports_error_in_payload(client_factory) -> None:  # type: ignore[no-untyped-def]

@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-05-06
+
+### Added
+
+- **Sort/filter persisted to `localStorage`** — your sort key, direction
+  and search filter survive a full page reload (not just an auto-refresh
+  tick). Stored under the `ovispect:ui` key, no PII.
+- **Live diff between snapshots** — newly connected clients flash green
+  for ~2.4s; departed clients linger one tick with a red strikethrough
+  fade-out instead of vanishing silently. Skipped on the first snapshot
+  so the dashboard doesn't flash every row on load.
+- **Per-client drawer**: clicking a row opens a slide-in panel with the
+  full session info (username, real address, both virtual IPs, RX/TX
+  with raw byte counts, connected timestamp + duration, client/peer IDs,
+  data-channel cipher). Closes on backdrop click, ✕, or `Esc`. Drawer
+  keeps live-updating while open as long as the client is still
+  connected; shows a "disconnected" banner otherwise.
+- New deployment example: `compose.shared-network.example.yml` —
+  documents the pattern of joining ovispect to a pre-existing Docker
+  bridge network with a stable subnet (useful when OpenVPN's management
+  port is reachable from the bridge gateway, or when other services on
+  the host need to talk to ovispect without published ports).
+
+### Changed
+
+- `GET /api/clients` payload now includes `virtual_ipv6_address`,
+  `client_id`, `peer_id`, and `data_channel_cipher` so the drawer can
+  render them without a second round-trip.
+
 ## [0.3.1] - 2026-05-06
 
 ### Added
@@ -135,7 +164,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Test suite (41 tests) covering parser, formatting helpers, and HTTP
   routes via FastAPI's `TestClient`.
 
-[Unreleased]: https://github.com/Upellift99/ovispect/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/Upellift99/ovispect/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/Upellift99/ovispect/releases/tag/v0.4.0
 [0.3.1]: https://github.com/Upellift99/ovispect/releases/tag/v0.3.1
 [0.3.0]: https://github.com/Upellift99/ovispect/releases/tag/v0.3.0
 [0.2.2]: https://github.com/Upellift99/ovispect/releases/tag/v0.2.2

@@ -78,9 +78,30 @@
             100% { opacity: 0.45; box-shadow: 0 0 0 0     rgba(74, 222, 128, 0.0);  }
         }
 
-        tbody tr { transition: background-color 120ms ease-in-out; }
+        tbody tr { transition: background-color 120ms ease-in-out; cursor: pointer; }
         tbody tr:nth-child(even) { background-color: rgba(23, 23, 23, 0.35); }
         tbody tr:hover { background-color: rgba(38, 38, 38, 0.7); }
+        tbody tr.row-empty { cursor: default; }
+        tbody tr.row-empty:hover { background-color: transparent; }
+
+        /* Highlight rows that just appeared. */
+        @keyframes flash-in {
+            0%   { background-color: rgba(74, 222, 128, 0.35); }
+            100% { background-color: transparent; }
+        }
+        tbody tr.is-new { animation: flash-in 2.4s ease-out; }
+
+        /* Departing rows persist for one tick before being removed. */
+        @keyframes flash-out {
+            0%   { background-color: rgba(248, 113, 113, 0.20); opacity: 1; }
+            100% { background-color: transparent; opacity: 0.35; }
+        }
+        tbody tr.is-leaving {
+            animation: flash-out 1.6s ease-out forwards;
+            color: #737373;
+            pointer-events: none;
+        }
+        tbody tr.is-leaving td { text-decoration: line-through; text-decoration-color: rgba(248, 113, 113, 0.6); }
 
         ::selection { background: rgba(74, 222, 128, 0.25); color: #f5f5f5; }
 
@@ -146,6 +167,71 @@
             background-color: rgba(64, 64, 64, 0.6);
         }
         .search-clear.hidden { display: none; }
+
+        /* Drawer (client details). */
+        .drawer-root { position: fixed; inset: 0; z-index: 50; }
+        .drawer-root.hidden { display: none; }
+        .drawer-backdrop {
+            position: absolute; inset: 0;
+            background-color: rgba(0, 0, 0, 0.55);
+            opacity: 0;
+            transition: opacity 180ms ease-out;
+        }
+        .drawer-root.is-open .drawer-backdrop { opacity: 1; }
+        .drawer-panel {
+            position: absolute;
+            top: 0; right: 0; bottom: 0;
+            width: min(420px, 92vw);
+            background-color: #0a0a0a;
+            border-left: 1px solid #262626;
+            box-shadow: -8px 0 32px rgba(0, 0, 0, 0.6);
+            transform: translateX(100%);
+            transition: transform 220ms ease-out;
+            display: flex; flex-direction: column;
+            overflow: hidden;
+        }
+        .drawer-root.is-open .drawer-panel { transform: translateX(0); }
+        .drawer-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 16px 20px;
+            border-bottom: 1px solid #1f1f1f;
+        }
+        .drawer-title {
+            font-family: '"IBM Plex Sans"', system-ui, sans-serif;
+            font-size: 14px; font-weight: 600;
+            color: #f5f5f5;
+            word-break: break-all;
+            min-width: 0;
+        }
+        .drawer-close {
+            background: transparent; border: 0;
+            color: #737373;
+            font-size: 22px; line-height: 1;
+            padding: 4px 8px; border-radius: 4px;
+            cursor: pointer;
+            transition: color 120ms ease, background-color 120ms ease;
+        }
+        .drawer-close:hover { color: #f5f5f5; background-color: rgba(64, 64, 64, 0.6); }
+        .drawer-body {
+            padding: 16px 20px;
+            overflow-y: auto;
+            font-size: 12px;
+        }
+        .drawer-fields { display: grid; grid-template-columns: 1fr; gap: 14px; margin: 0; }
+        .drawer-fields > div { display: flex; flex-direction: column; gap: 2px; }
+        .drawer-fields dt {
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            color: #525252;
+        }
+        .drawer-fields dd {
+            margin: 0;
+            color: #d4d4d4;
+            font-variant-numeric: tabular-nums;
+            word-break: break-all;
+        }
+        .drawer-fields dd.empty { color: #525252; font-style: italic; }
     </style>
 </head>
 <body class="min-h-screen font-mono antialiased">
@@ -275,15 +361,33 @@
 
 </div>
 
+<div id="client-drawer" class="drawer-root hidden" role="dialog" aria-modal="true" aria-labelledby="drawer-title">
+    <div class="drawer-backdrop" id="drawer-backdrop" aria-hidden="true"></div>
+    <aside class="drawer-panel">
+        <div class="drawer-header">
+            <h2 id="drawer-title" class="drawer-title">—</h2>
+            <button id="drawer-close" type="button" class="drawer-close" aria-label="Close details">&times;</button>
+        </div>
+        <div class="drawer-body">
+            <dl id="drawer-fields" class="drawer-fields"></dl>
+        </div>
+    </aside>
+</div>
+
 <script>
 (function () {
     const REFRESH_MS = {{ refresh_seconds }} * 1000;
+    const STORAGE_KEY = 'ovispect:ui';
+
     const STATE = {
         clients: [],
+        leaving: [],
         sortKey: 'common_name',
         sortDir: 'asc',
         filter: '',
     };
+    let firstSnapshotApplied = false;
+    let drawerKey = null;
 
     const tbody = document.getElementById('clients-tbody');
     const tfoot = document.getElementById('totals-tfoot');
@@ -299,11 +403,46 @@
     const searchClear = document.getElementById('search-clear');
     const filterStats = document.getElementById('filter-stats');
     const sortHeaders = document.querySelectorAll('th[data-sort-key]');
+    const drawer = document.getElementById('client-drawer');
+    const drawerBackdrop = document.getElementById('drawer-backdrop');
+    const drawerClose = document.getElementById('drawer-close');
+    const drawerTitle = document.getElementById('drawer-title');
+    const drawerFields = document.getElementById('drawer-fields');
 
+    // --- Persistence ------------------------------------------------------
+    function loadPreferences() {
+        try {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            if (!raw) return;
+            const saved = JSON.parse(raw);
+            if (typeof saved.sortKey === 'string') STATE.sortKey = saved.sortKey;
+            if (saved.sortDir === 'asc' || saved.sortDir === 'desc') STATE.sortDir = saved.sortDir;
+            if (typeof saved.filter === 'string') {
+                STATE.filter = saved.filter;
+                searchInput.value = saved.filter;
+            }
+        } catch (_) { /* corrupted entry, ignore */ }
+    }
+    function savePreferences() {
+        try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify({
+                sortKey: STATE.sortKey,
+                sortDir: STATE.sortDir,
+                filter: STATE.filter,
+            }));
+        } catch (_) { /* quota / private mode, fine */ }
+    }
+
+    // --- Identity / diff --------------------------------------------------
+    function keyOf(c) {
+        if (c.client_id && c.client_id !== 'UNDEF' && c.client_id !== '0') return `id:${c.client_id}`;
+        return `cn:${c.common_name}|${c.real_address_full}`;
+    }
+
+    // --- Helpers ----------------------------------------------------------
     function syncClearVisibility() {
         searchClear.classList.toggle('hidden', searchInput.value === '');
     }
-
     function escapeHtml(value) {
         return String(value)
             .replace(/&/g, '&amp;')
@@ -312,10 +451,22 @@
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#39;');
     }
+    function humanizeBytes(value) {
+        if (value < 1024) return `${value} B`;
+        const units = ['KB', 'MB', 'GB', 'TB', 'PB', 'EB'];
+        let size = value;
+        for (const unit of units) {
+            size /= 1024;
+            if (size < 1024) return `${size.toFixed(1)} ${unit}`;
+        }
+        return `${size.toFixed(1)} EB`;
+    }
 
+    // --- Filter + sort + render -------------------------------------------
     function applyFilterAndSort() {
         const needle = STATE.filter.trim().toLowerCase();
-        let rows = STATE.clients;
+        const all = STATE.clients.concat(STATE.leaving);
+        let rows = all;
         if (needle) {
             rows = rows.filter(c =>
                 c.common_name.toLowerCase().includes(needle)
@@ -329,6 +480,8 @@
         const header = document.querySelector(`th[data-sort-key="${key}"]`);
         const type = header ? header.dataset.sortType : 'text';
         rows = rows.slice().sort((a, b) => {
+            // Departing rows sink to the bottom regardless of sort key.
+            if (a._isLeaving !== b._isLeaving) return a._isLeaving ? 1 : -1;
             const av = a[key];
             const bv = b[key];
             if (type === 'number') return (av - bv) * dir;
@@ -340,11 +493,9 @@
     function renderRows(rows) {
         if (rows.length === 0) {
             const total = STATE.clients.length;
-            const message = total === 0
-                ? 'No active sessions'
-                : 'No matches';
+            const message = total === 0 ? 'No active sessions' : 'No matches';
             tbody.innerHTML = `
-                <tr>
+                <tr class="row-empty">
                     <td colspan="6" class="px-4 py-16 text-center">
                         <div class="flex flex-col items-center gap-3">
                             <span class="pulse-dot is-idle" aria-hidden="true"></span>
@@ -354,15 +505,21 @@
                 </tr>`;
             return;
         }
-        const html = rows.map(c => `
-            <tr class="border-b border-neutral-900 last:border-b-0">
+        const html = rows.map(c => {
+            const flags = [];
+            if (c._isNew) flags.push('is-new');
+            if (c._isLeaving) flags.push('is-leaving');
+            const cls = ['border-b', 'border-neutral-900', 'last:border-b-0', ...flags].join(' ');
+            return `
+            <tr class="${cls}" data-row-key="${escapeHtml(keyOf(c))}">
                 <td class="px-4 py-2.5 text-neutral-100">${escapeHtml(c.common_name)}</td>
                 <td class="px-4 py-2.5 text-neutral-300 tabular" title="${escapeHtml(c.real_address_full)}">${escapeHtml(c.real_address_short)}</td>
                 <td class="px-4 py-2.5 text-neutral-400 tabular">${escapeHtml(c.virtual_address)}</td>
                 <td class="px-4 py-2.5 text-right text-neutral-200 tabular">${escapeHtml(c.bytes_received_human)}</td>
                 <td class="px-4 py-2.5 text-right text-neutral-200 tabular">${escapeHtml(c.bytes_sent_human)}</td>
                 <td class="px-4 py-2.5 text-right text-neutral-300 tabular" title="${escapeHtml(c.connected_absolute)}">${escapeHtml(c.connected_relative)}</td>
-            </tr>`).join('');
+            </tr>`;
+        }).join('');
         tbody.innerHTML = html;
     }
 
@@ -372,11 +529,12 @@
             return;
         }
         tfoot.classList.remove('hidden');
-        const sumRx = rows.reduce((acc, c) => acc + c.bytes_received, 0);
-        const sumTx = rows.reduce((acc, c) => acc + c.bytes_sent, 0);
+        const live = rows.filter(c => !c._isLeaving);
+        const sumRx = live.reduce((acc, c) => acc + c.bytes_received, 0);
+        const sumTx = live.reduce((acc, c) => acc + c.bytes_sent, 0);
         totalRx.textContent = humanizeBytes(sumRx);
         totalTx.textContent = humanizeBytes(sumTx);
-        totalCount.textContent = rows.length;
+        totalCount.textContent = live.length;
     }
 
     function renderFilterStats(rows) {
@@ -385,7 +543,8 @@
             filterStats.textContent = '';
             return;
         }
-        filterStats.textContent = `${rows.length} / ${total} match` + (rows.length === 1 ? '' : 'es');
+        const visibleLive = rows.filter(c => !c._isLeaving).length;
+        filterStats.textContent = `${visibleLive} / ${total} match` + (visibleLive === 1 ? '' : 'es');
     }
 
     function renderSortIndicators() {
@@ -407,19 +566,10 @@
         renderTotals(visible);
         renderFilterStats(visible);
         renderSortIndicators();
+        if (drawerKey) refreshDrawerIfOpen();
     }
 
-    function humanizeBytes(value) {
-        if (value < 1024) return `${value} B`;
-        const units = ['KB', 'MB', 'GB', 'TB', 'PB', 'EB'];
-        let size = value;
-        for (const unit of units) {
-            size /= 1024;
-            if (size < 1024) return `${size.toFixed(1)} ${unit}`;
-        }
-        return `${size.toFixed(1)} EB`;
-    }
-
+    // --- Header / status --------------------------------------------------
     function updateHeader(payload) {
         connectedCount.textContent = payload.clients_connected;
         lastFetch.textContent = payload.fetched_at_local;
@@ -436,6 +586,30 @@
         }
     }
 
+    // --- Snapshot reconciliation -----------------------------------------
+    function reconcileSnapshot(newClients) {
+        const oldByKey = new Map(STATE.clients.map(c => [keyOf(c), c]));
+        const newKeys = new Set(newClients.map(c => keyOf(c)));
+
+        // Mark arrivals (skip on first snapshot to avoid flashing every row).
+        const annotated = newClients.map(c => ({
+            ...c,
+            _isNew: firstSnapshotApplied && !oldByKey.has(keyOf(c)),
+            _isLeaving: false,
+        }));
+
+        // Departures = previously live clients absent from the new snapshot.
+        // Hold them for one tick with a leaving marker; on the *next* fetch
+        // they will not be re-introduced.
+        const departing = STATE.clients
+            .filter(c => !newKeys.has(keyOf(c)))
+            .map(c => ({ ...c, _isNew: false, _isLeaving: true }));
+
+        STATE.clients = annotated;
+        STATE.leaving = firstSnapshotApplied ? departing : [];
+        firstSnapshotApplied = true;
+    }
+
     async function fetchSnapshot() {
         try {
             const response = await fetch('/api/clients', {
@@ -448,7 +622,7 @@
             }
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             const payload = await response.json();
-            STATE.clients = payload.clients || [];
+            reconcileSnapshot(payload.clients || []);
             updateHeader(payload);
             render();
         } catch (err) {
@@ -459,6 +633,99 @@
         }
     }
 
+    // --- Drawer -----------------------------------------------------------
+    function findClientByKey(key) {
+        return STATE.clients.find(c => keyOf(c) === key)
+            || STATE.leaving.find(c => keyOf(c) === key)
+            || null;
+    }
+
+    function renderDrawerFields(c, isStale) {
+        const ipv6 = c.virtual_ipv6_address && c.virtual_ipv6_address !== ''
+            ? c.virtual_ipv6_address
+            : null;
+        const fields = [
+            ['Username', c.username && c.username !== 'UNDEF' ? c.username : null],
+            ['Real address', c.real_address_full],
+            ['Virtual IPv4', c.virtual_address && c.virtual_address !== '—' ? c.virtual_address : null],
+            ['Virtual IPv6', ipv6],
+            ['RX (bytes)', `${c.bytes_received_human}  (${c.bytes_received.toLocaleString()})`],
+            ['TX (bytes)', `${c.bytes_sent_human}  (${c.bytes_sent.toLocaleString()})`],
+            ['Connected since', c.connected_absolute],
+            ['Connected for', c.connected_relative],
+            ['Client ID', c.client_id || null],
+            ['Peer ID', c.peer_id || null],
+            ['Cipher', c.data_channel_cipher || null],
+        ];
+        const items = fields.map(([label, value]) => {
+            const empty = value == null || value === '';
+            const display = empty ? '—' : value;
+            return `<div>
+                <dt>${escapeHtml(label)}</dt>
+                <dd class="${empty ? 'empty' : ''}">${escapeHtml(display)}</dd>
+            </div>`;
+        }).join('');
+        const banner = isStale
+            ? `<div class="mb-3 rounded border border-red-900/60 bg-red-950/30 px-3 py-2 text-[11px] text-red-300">Client disconnected — showing last known values.</div>`
+            : '';
+        drawerFields.innerHTML = banner + items;
+        drawerTitle.textContent = c.common_name;
+    }
+
+    function refreshDrawerIfOpen() {
+        if (!drawerKey) return;
+        const c = findClientByKey(drawerKey);
+        if (!c) {
+            // Client gone from both live and leaving lists.
+            drawerTitle.textContent = '—';
+            drawerFields.innerHTML = `<div class="rounded border border-red-900/60 bg-red-950/30 px-3 py-2 text-[11px] text-red-300">Client disconnected.</div>`;
+            return;
+        }
+        renderDrawerFields(c, !!c._isLeaving);
+    }
+
+    function openDrawer(rowKey) {
+        const c = findClientByKey(rowKey);
+        if (!c) return;
+        drawerKey = rowKey;
+        renderDrawerFields(c, !!c._isLeaving);
+        drawer.classList.remove('hidden');
+        // Force reflow so the transition kicks in.
+        void drawer.offsetWidth;
+        drawer.classList.add('is-open');
+        drawerClose.focus();
+    }
+
+    function closeDrawer() {
+        drawerKey = null;
+        drawer.classList.remove('is-open');
+        // Wait for the transition before fully hiding.
+        setTimeout(() => drawer.classList.add('hidden'), 220);
+    }
+
+    tbody.addEventListener('click', (e) => {
+        const tr = e.target.closest('tr[data-row-key]');
+        if (!tr) return;
+        if (tr.classList.contains('row-empty')) return;
+        if (tr.classList.contains('is-leaving')) return;
+        openDrawer(tr.dataset.rowKey);
+    });
+    drawerBackdrop.addEventListener('click', closeDrawer);
+    drawerClose.addEventListener('click', closeDrawer);
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape') return;
+        if (!drawer.classList.contains('hidden')) {
+            closeDrawer();
+            return;
+        }
+        if (document.activeElement === searchInput && searchInput.value !== '') {
+            e.preventDefault();
+            searchClear.click();
+        }
+    });
+
+    // --- Listeners --------------------------------------------------------
     sortHeaders.forEach(h => {
         h.addEventListener('click', () => {
             const key = h.dataset.sortKey;
@@ -468,6 +735,7 @@
                 STATE.sortKey = key;
                 STATE.sortDir = 'asc';
             }
+            savePreferences();
             render();
         });
     });
@@ -478,6 +746,7 @@
         clearTimeout(filterTimer);
         filterTimer = setTimeout(() => {
             STATE.filter = searchInput.value;
+            savePreferences();
             render();
         }, 80);
     });
@@ -485,22 +754,18 @@
     searchClear.addEventListener('click', () => {
         searchInput.value = '';
         STATE.filter = '';
+        savePreferences();
         syncClearVisibility();
         searchInput.focus();
         render();
     });
 
-    searchInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && searchInput.value !== '') {
-            e.preventDefault();
-            searchClear.click();
-        }
-    });
-
+    // --- Boot -------------------------------------------------------------
+    loadPreferences();
+    syncClearVisibility();
+    renderSortIndicators();
     fetchSnapshot();
     setInterval(fetchSnapshot, REFRESH_MS);
-    renderSortIndicators();
-    syncClearVisibility();
 })();
 </script>
 

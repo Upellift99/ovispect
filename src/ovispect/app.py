@@ -69,6 +69,7 @@ def _format_client_row(client: Client, *, now: datetime) -> dict[str, Any]:
         "real_address_short": strip_port(client.real_address),
         "real_address_full": client.real_address,
         "virtual_address": client.virtual_address or "—",
+        "virtual_ipv6_address": client.virtual_ipv6_address,
         "bytes_received": client.bytes_received,
         "bytes_received_human": humanize_bytes(client.bytes_received),
         "bytes_sent": client.bytes_sent,
@@ -77,6 +78,9 @@ def _format_client_row(client: Client, *, now: datetime) -> dict[str, Any]:
         "connected_relative": humanize_duration(connected_for),
         "connected_absolute": client.connected_since,
         "username": client.username,
+        "client_id": client.client_id,
+        "peer_id": client.peer_id,
+        "data_channel_cipher": client.data_channel_cipher,
     }
 
 

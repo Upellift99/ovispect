@@ -1,0 +1,69 @@
+# Variant of compose.example.yml that joins ovispect to a shared Docker
+# bridge network with a stable subnet, instead of letting Compose create a
+# fresh per-project network.
+#
+# Use this layout when:
+#   - The OpenVPN management interface is reachable from the bridge IP of
+#     this network (e.g. `management 0.0.0.0 7505` on the host so the
+#     container can connect via the bridge gateway 192.168.32.1).
+#   - You already run other services on the same Docker host that need to
+#     talk to ovispect (Prometheus, an internal proxy…) — joining them to
+#     the same `skynet` network is simpler than publishing every port.
+#
+# The network is declared `external: false` here so Docker Compose creates
+# it on first `up` if it doesn't exist yet. If the network is already
+# managed by another stack on this host, replace the `networks:` block at
+# the bottom with:
+#
+#     networks:
+#       skynet:
+#         external: true
+#         name: skynet
+#
+# …and Compose will attach to the pre-existing one.
+#
+# All other security/UX settings (auth, hardening, healthcheck) are
+# identical to compose.example.yml.
+
+services:
+  ovispect:
+    image: ghcr.io/upellift99/ovispect:latest
+    container_name: ovispect
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      OPENVPN_HOST: ${OPENVPN_HOST:?set OPENVPN_HOST in .env}
+      OPENVPN_PORT: ${OPENVPN_PORT:?set OPENVPN_PORT in .env}
+      OPENVPN_PASSWORD: ${OPENVPN_PASSWORD:-}
+      SITE_NAME: ${SITE_NAME:-OpenVPN}
+      REFRESH_SECONDS: ${REFRESH_SECONDS:-10}
+      TIMEZONE: ${TIMEZONE:-UTC}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+
+      AUTH_USERNAME: ${AUTH_USERNAME:-admin}
+      AUTH_PASSWORD_HASH: ${AUTH_PASSWORD_HASH:?set AUTH_PASSWORD_HASH in .env}
+      SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET in .env}
+      SESSION_LIFETIME_SECONDS: ${SESSION_LIFETIME_SECONDS:-86400}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-true}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:8000/healthz"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - skynet
+
+networks:
+  skynet:
+    name: skynet
+    ipam:
+      driver: default
+      config:
+        - subnet: "192.168.32.0/24"
