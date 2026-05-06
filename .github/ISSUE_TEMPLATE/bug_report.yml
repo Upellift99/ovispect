@@ -1,0 +1,90 @@
+name: Bug report
+description: Something is broken, behaves unexpectedly, or crashes.
+title: "[bug] "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug report. Please redact any
+        secrets, real IP addresses, or client certificates before submitting.
+  - type: input
+    id: ovispect-version
+    attributes:
+      label: ovispect version
+      description: Image tag (e.g. `ghcr.io/<OWNER>/ovispect:0.1.0`) or commit SHA if running from source.
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: input
+    id: openvpn-version
+    attributes:
+      label: OpenVPN server version
+      description: Output of `openvpn --version` on the server side.
+      placeholder: "OpenVPN 2.6.x"
+    validations:
+      required: true
+  - type: dropdown
+    id: how-running
+    attributes:
+      label: How are you running ovispect?
+      options:
+        - Docker (single container)
+        - Docker Compose
+        - Kubernetes
+        - From source (python -m ovispect)
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: env-config
+    attributes:
+      label: Configuration (env vars)
+      description: |
+        Paste the env vars passed to ovispect. Redact `OPENVPN_PASSWORD`,
+        IP addresses, and any other sensitive values.
+      render: shell
+      placeholder: |
+        OPENVPN_HOST=10.0.0.5
+        OPENVPN_PORT=5555
+        SITE_NAME=My VPN
+        TIMEZONE=UTC
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Output of `docker logs ovispect` or equivalent. Redact sensitive data.
+      render: shell
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Pre-flight
+      options:
+        - label: I searched existing issues and did not find a duplicate.
+          required: true
+        - label: I redacted secrets, IP addresses, and certificates from this report.
+          required: true
