@@ -1,0 +1,128 @@
+"""Integration tests for the FastAPI application."""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime
+from typing import Any
+
+import pytest
+from fastapi.testclient import TestClient
+
+from ovispect import app as app_module
+from ovispect.config import Settings
+from ovispect.ovpn import Client, StatusSnapshot
+
+
+def _make_settings(**overrides: Any) -> Settings:
+    base: dict[str, Any] = {
+        "openvpn_host": "127.0.0.1",
+        "openvpn_port": 5555,
+        "site_name": "Test VPN",
+        "refresh_seconds": 10,
+        "timezone": "UTC",
+        "log_level": "INFO",
+    }
+    base.update(overrides)
+    return Settings(**base)
+
+
+def _sample_clients() -> list[Client]:
+    return [
+        Client(
+            common_name="alice@example.com",
+            real_address="203.0.113.10:51820",
+            virtual_address="10.8.0.6",
+            virtual_ipv6_address="",
+            bytes_received=1234567,
+            bytes_sent=7654321,
+            connected_since="Mon May  6 11:00:00 2026",
+            connected_since_t=1714989600,
+            username="UNDEF",
+            client_id="1",
+            peer_id="0",
+            data_channel_cipher="AES-256-GCM",
+        ),
+    ]
+
+
+@pytest.fixture
+def client_factory(monkeypatch: pytest.MonkeyPatch):  # type: ignore[no-untyped-def]
+    """Build a TestClient with a stubbed ``fetch_status``."""
+
+    def _build(snapshot: StatusSnapshot) -> TestClient:
+        def _fake_fetch(*_args: Any, **_kwargs: Any) -> StatusSnapshot:
+            return snapshot
+
+        monkeypatch.setattr(app_module, "fetch_status", _fake_fetch)
+        application = app_module.create_app(_make_settings())
+        return TestClient(application)
+
+    return _build
+
+
+def test_healthz_returns_ok(client_factory) -> None:  # type: ignore[no-untyped-def]
+    snapshot = StatusSnapshot(fetched_at=datetime.now(tz=UTC), clients=[])
+    with client_factory(snapshot) as client:
+        response = client.get("/healthz")
+    assert response.status_code == 200
+    assert response.json() == {"ok": True}
+
+
+def test_index_renders_clients(client_factory) -> None:  # type: ignore[no-untyped-def]
+    snapshot = StatusSnapshot(fetched_at=datetime.now(tz=UTC), clients=_sample_clients())
+    with client_factory(snapshot) as client:
+        response = client.get("/")
+    assert response.status_code == 200
+    body = response.text
+    assert "Test VPN" in body
+    assert "alice@example.com" in body
+    assert "203.0.113.10" in body
+    assert "10.8.0.6" in body
+    assert "1.2 MB" in body
+    assert "7.3 MB" in body
+
+
+def test_index_shows_empty_state(client_factory) -> None:  # type: ignore[no-untyped-def]
+    snapshot = StatusSnapshot(fetched_at=datetime.now(tz=UTC), clients=[])
+    with client_factory(snapshot) as client:
+        response = client.get("/")
+    assert response.status_code == 200
+    assert "No active sessions" in response.text
+
+
+def test_index_shows_error_banner(client_factory) -> None:  # type: ignore[no-untyped-def]
+    snapshot = StatusSnapshot(
+        fetched_at=datetime.now(tz=UTC),
+        clients=[],
+        error="connection refused",
+    )
+    with client_factory(snapshot) as client:
+        response = client.get("/")
+    assert response.status_code == 200
+    body = response.text
+    assert "Cannot reach the OpenVPN management interface" in body
+    assert "connection refused" in body
+
+
+def test_metrics_exposes_prometheus(client_factory) -> None:  # type: ignore[no-untyped-def]
+    snapshot = StatusSnapshot(fetched_at=datetime.now(tz=UTC), clients=_sample_clients())
+    with client_factory(snapshot) as client:
+        response = client.get("/metrics")
+    assert response.status_code == 200
+    body = response.text
+    assert "ovispect_up 1" in body
+    assert "ovispect_clients_connected 1" in body
+    assert "ovispect_bytes_received_total 1234567" in body
+    assert "ovispect_bytes_sent_total 7654321" in body
+
+
+def test_metrics_reports_down_on_error(client_factory) -> None:  # type: ignore[no-untyped-def]
+    snapshot = StatusSnapshot(
+        fetched_at=datetime.now(tz=UTC),
+        clients=[],
+        error="connection refused",
+    )
+    with client_factory(snapshot) as client:
+        response = client.get("/metrics")
+    assert response.status_code == 200
+    assert "ovispect_up 0" in response.text
