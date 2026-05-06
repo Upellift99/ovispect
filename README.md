@@ -197,6 +197,26 @@ silently falls back to no flag when the address is private/loopback or
 when the database is unavailable. See the *License → Third-party data
 attributions* section for details on opting out.
 
+### Webhooks (connect / disconnect notifications)
+
+Set `WEBHOOK_URL` to enable a background task that polls the management
+interface every `WEBHOOK_POLL_SECONDS` and POSTs an event for every
+client that joins or leaves. Supported formats:
+
+| `WEBHOOK_FORMAT` | Body                                                                 |
+|------------------|----------------------------------------------------------------------|
+| `generic`        | Full JSON `{event, site_name, timestamp, client: {…}}` (default)     |
+| `slack`          | `{"text": "🟢 alice connected (🇫🇷 1.2.3.4 → 10.8.0.6)"}`            |
+| `discord`        | `{"content": "…"}` (same one-liner)                                  |
+| `gotify`         | `{"title": SITE_NAME, "message": "…", "priority": 5}`                |
+
+Set `WEBHOOK_SECRET` to additionally sign the body with HMAC-SHA256 and
+ship the digest in the `X-Ovispect-Signature: sha256=<hex>` header
+(useful with `generic` to authenticate the source). 4xx responses are
+not retried; 5xx and connection errors retry up to `WEBHOOK_MAX_RETRIES`
+with exponential backoff. Filter event kinds via
+`WEBHOOK_EVENTS=connect` (or `disconnect`).
+
 ## Building from source
 
 With `uv` (recommended):

@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import logging
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Any
@@ -34,6 +36,7 @@ from ovispect.auth import (
     verify_password,
 )
 from ovispect.config import Settings, get_settings
+from ovispect.events import diff_clients
 from ovispect.formatting import (
     format_local_time,
     humanize_bytes,
@@ -43,6 +46,7 @@ from ovispect.formatting import (
 )
 from ovispect.geo import country_flag, extract_ip, get_database
 from ovispect.ovpn import Client, StatusSnapshot, fetch_status
+from ovispect.webhooks import WebhookNotifier
 
 logger = logging.getLogger(__name__)
 
@@ -150,6 +154,65 @@ def _build_view_model(
     }
 
 
+async def _webhook_poll_loop(cfg: Settings, notifier: WebhookNotifier) -> None:
+    """Poll the management interface and forward connect/disconnect events.
+
+    Runs forever (until cancelled by the lifespan teardown). Errors during
+    a single iteration are logged and never bubble up — the loop sleeps
+    and retries on the next tick.
+    """
+    last_clients: list[Client] | None = None
+    enabled_kinds = cfg.webhook_event_kinds
+    while True:
+        try:
+            snapshot = await asyncio.to_thread(
+                fetch_status,
+                cfg.openvpn_host,
+                cfg.openvpn_port,
+                password=cfg.openvpn_password.get_secret_value(),
+                timeout=cfg.management_timeout_seconds,
+            )
+            if snapshot.error is None:
+                if last_clients is not None:
+                    for event in diff_clients(last_clients, snapshot.clients):
+                        if event.kind in enabled_kinds:
+                            await notifier.send(event)
+                last_clients = list(snapshot.clients)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("webhook poll iteration failed")
+        await asyncio.sleep(cfg.webhook_poll_seconds)
+
+
+def _make_lifespan(cfg: Settings) -> Callable[[FastAPI], Any]:
+    @contextlib.asynccontextmanager
+    async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+        if not cfg.webhook_enabled:
+            yield
+            return
+        db = get_database(cfg.geoip_database_path)
+        country_for_ip = db.lookup if db is not None else None
+        notifier = WebhookNotifier(cfg, country_for_ip=country_for_ip)
+        task = asyncio.create_task(_webhook_poll_loop(cfg, notifier))
+        logger.info(
+            "Webhook poll loop started (every %ds → %s, format=%s, events=%s)",
+            cfg.webhook_poll_seconds,
+            cfg.webhook_url,
+            cfg.webhook_format,
+            sorted(cfg.webhook_event_kinds),
+        )
+        try:
+            yield
+        finally:
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+            await notifier.close()
+
+    return lifespan
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     """Application factory.
 
@@ -166,6 +229,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         docs_url=None,
         redoc_url=None,
         openapi_url=None,
+        lifespan=_make_lifespan(cfg),
     )
 
     if auth_enabled:

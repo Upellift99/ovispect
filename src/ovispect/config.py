@@ -71,6 +71,62 @@ class Settings(BaseSettings):
         ),
     )
 
+    webhook_url: str = Field(
+        default="",
+        description=(
+            "URL to POST connect/disconnect events to. Empty disables the"
+            " webhook background task entirely."
+        ),
+    )
+    webhook_format: Literal["generic", "slack", "discord", "gotify"] = Field(
+        default="generic",
+        description="Payload shape: generic (full JSON), slack, discord, or gotify.",
+    )
+    webhook_secret: SecretStr = Field(
+        default=SecretStr(""),
+        description=(
+            "If set, body is signed with HMAC-SHA256 and the digest is sent"
+            " as the X-Ovispect-Signature header (sha256=<hex>)."
+        ),
+    )
+    webhook_timeout_seconds: float = Field(
+        default=5.0,
+        ge=0.5,
+        le=60.0,
+        description="Per-attempt HTTP timeout for webhook deliveries.",
+    )
+    webhook_poll_seconds: int = Field(
+        default=10,
+        ge=1,
+        le=3600,
+        description=(
+            "Backend polling interval for the webhook event loop. May differ"
+            " from REFRESH_SECONDS (the UI auto-refresh)."
+        ),
+    )
+    webhook_max_retries: int = Field(
+        default=3,
+        ge=1,
+        le=10,
+        description="Number of retry attempts on webhook delivery failure.",
+    )
+    webhook_events: str = Field(
+        default="connect,disconnect",
+        description=(
+            "Comma-separated list of event kinds to forward. Valid values: connect, disconnect."
+        ),
+    )
+
+    @property
+    def webhook_event_kinds(self) -> frozenset[str]:
+        """Parse :attr:`webhook_events` into a validated set of event kinds."""
+        items = {x.strip().lower() for x in self.webhook_events.split(",") if x.strip()}
+        return frozenset(items & {"connect", "disconnect"})
+
+    @property
+    def webhook_enabled(self) -> bool:
+        return bool(self.webhook_url.strip()) and bool(self.webhook_event_kinds)
+
     auth_username: str = Field(
         default="admin",
         min_length=1,
@@ -110,6 +166,13 @@ class Settings(BaseSettings):
             " plaintext testing without TLS."
         ),
     )
+
+    @model_validator(mode="after")
+    def _validate_webhook_url(self) -> Self:
+        url = self.webhook_url.strip()
+        if url and not (url.startswith("http://") or url.startswith("https://")):
+            raise ValueError("WEBHOOK_URL must start with http:// or https://")
+        return self
 
     @model_validator(mode="after")
     def _validate_auth_pair(self) -> Self:

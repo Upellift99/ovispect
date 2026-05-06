@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-05-06
+
+### Added
+
+- **Webhooks for connect/disconnect events** — set `WEBHOOK_URL` and a
+  background task polls the management interface every
+  `WEBHOOK_POLL_SECONDS` (default 10s), diffs each snapshot against the
+  previous one, and POSTs an event for every client that joins or
+  leaves. Independent of the dashboard refresh: events ship even if
+  nobody has the page open.
+- Four output formats selectable via `WEBHOOK_FORMAT`:
+  - `generic` (default) — full JSON `{event, site_name, timestamp,
+    client: {…}}` with all session metadata + `country_code`
+  - `slack` — `{"text": "🟢 alice connected (🇫🇷 1.2.3.4 → 10.8.0.6)"}`
+  - `discord` — `{"content": "…"}` one-liner
+  - `gotify` — `{"title", "message", "priority": 5}`
+- Optional HMAC-SHA256 body signing via `WEBHOOK_SECRET`; digest ships
+  in the `X-Ovispect-Signature: sha256=<hex>` header.
+- Bounded retry on transient failures: 4xx responses are not retried,
+  5xx and connection errors retry up to `WEBHOOK_MAX_RETRIES` with
+  exponential backoff capped at 10 s.
+- Event filter via `WEBHOOK_EVENTS=connect,disconnect` (either, both,
+  or neither — neither disables the loop entirely).
+- Client identity uses OpenVPN's `client_id` when defined, else falls
+  back to `(common_name, real_address)` so two parallel sessions of the
+  same user don't trigger spurious duplicate events.
+
+### Changed
+
+- New runtime dependency: `httpx>=0.27` (already a transitive dev dep
+  via FastAPI's `TestClient`; promoted to a first-class prod dep for
+  the webhook sender).
+- Test suite grows from 112 to 134 tests; `pytest-asyncio` added in dev
+  deps with `asyncio_mode = "auto"`.
+
 ## [0.5.0] - 2026-05-06
 
 ### Added
@@ -194,7 +229,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Test suite (41 tests) covering parser, formatting helpers, and HTTP
   routes via FastAPI's `TestClient`.
 
-[Unreleased]: https://github.com/Upellift99/ovispect/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/Upellift99/ovispect/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/Upellift99/ovispect/releases/tag/v0.6.0
 [0.5.0]: https://github.com/Upellift99/ovispect/releases/tag/v0.5.0
 [0.4.0]: https://github.com/Upellift99/ovispect/releases/tag/v0.4.0
 [0.3.1]: https://github.com/Upellift99/ovispect/releases/tag/v0.3.1
