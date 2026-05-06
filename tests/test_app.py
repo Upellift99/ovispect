@@ -83,6 +83,52 @@ def test_index_renders_clients(client_factory) -> None:  # type: ignore[no-untyp
     assert "7.3 MB" in body
 
 
+def test_api_clients_returns_json_payload(client_factory) -> None:  # type: ignore[no-untyped-def]
+    snapshot = StatusSnapshot(fetched_at=datetime.now(tz=UTC), clients=_sample_clients())
+    with client_factory(snapshot) as client:
+        response = client.get("/api/clients")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["clients_connected"] == 1
+    assert payload["is_error"] is False
+    assert payload["error"] is None
+    assert payload["total_bytes_received"] == 1234567
+    assert payload["total_bytes_sent"] == 7654321
+    assert payload["total_bytes_received_human"] == "1.2 MB"
+    assert payload["total_bytes_sent_human"] == "7.3 MB"
+    assert len(payload["clients"]) == 1
+    row = payload["clients"][0]
+    assert row["common_name"] == "alice@example.com"
+    assert row["bytes_received"] == 1234567
+    assert row["bytes_received_human"] == "1.2 MB"
+    assert row["real_address_full"] == "203.0.113.10:51820"
+    assert row["real_address_short"] == "203.0.113.10"
+    assert row["virtual_address"] == "10.8.0.6"
+    assert row["connected_for_seconds"] >= 0
+
+
+def test_api_clients_reports_error_in_payload(client_factory) -> None:  # type: ignore[no-untyped-def]
+    snapshot = StatusSnapshot(
+        fetched_at=datetime.now(tz=UTC),
+        clients=[],
+        error="connection refused",
+    )
+    with client_factory(snapshot) as client:
+        response = client.get("/api/clients")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["is_error"] is True
+    assert payload["error"] == "connection refused"
+    assert payload["clients"] == []
+    assert payload["clients_connected"] == 0
+
+
+def test_api_clients_requires_auth_when_enabled(client_with_auth) -> None:  # type: ignore[no-untyped-def]
+    response = client_with_auth.get("/api/clients")
+    assert response.status_code == 303
+    assert response.headers["location"].startswith("/login")
+
+
 def test_index_shows_empty_state(client_factory) -> None:  # type: ignore[no-untyped-def]
     snapshot = StatusSnapshot(fetched_at=datetime.now(tz=UTC), clients=[])
     with client_factory(snapshot) as client:

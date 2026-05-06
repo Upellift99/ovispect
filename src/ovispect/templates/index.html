@@ -3,7 +3,6 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="refresh" content="{{ refresh_seconds }}">
     <meta name="color-scheme" content="dark">
     <meta name="robots" content="noindex, nofollow">
     <title>{{ site_name }} — ovispect</title>
@@ -87,6 +86,33 @@
         .scroll-x { scrollbar-color: #262626 transparent; scrollbar-width: thin; }
         .scroll-x::-webkit-scrollbar { height: 6px; }
         .scroll-x::-webkit-scrollbar-thumb { background: #262626; border-radius: 3px; }
+
+        th[data-sort-key] {
+            cursor: pointer;
+            user-select: none;
+        }
+        th[data-sort-key]:hover { color: #d4d4d4; }
+        th[data-sort-key] .sort-arrow {
+            display: inline-block;
+            width: 8px;
+            margin-left: 4px;
+            color: #525252;
+        }
+        th[data-sort-key].sort-active .sort-arrow { color: #4ade80; }
+
+        #search-input {
+            background-color: rgba(23, 23, 23, 0.55);
+            border: 1px solid #262626;
+            color: #e5e5e5;
+            font-family: inherit;
+            font-size: 12px;
+        }
+        #search-input::placeholder { color: #525252; }
+        #search-input:focus {
+            outline: none;
+            border-color: rgba(74, 222, 128, 0.45);
+            background-color: rgba(23, 23, 23, 0.85);
+        }
     </style>
 </head>
 <body class="min-h-screen font-mono antialiased">
@@ -96,13 +122,7 @@
     <header class="pb-5">
         <div class="flex items-center justify-between gap-6 flex-wrap">
             <div class="flex items-center gap-3">
-                {% if is_error %}
-                    <span class="pulse-dot is-error" aria-hidden="true"></span>
-                {% elif is_stale %}
-                    <span class="pulse-dot is-stale" aria-hidden="true"></span>
-                {% else %}
-                    <span class="pulse-dot is-live" aria-hidden="true"></span>
-                {% endif %}
+                <span id="status-dot" class="pulse-dot {% if is_error %}is-error{% elif is_stale %}is-stale{% else %}is-live{% endif %}" aria-hidden="true"></span>
                 <h1 class="font-sans text-lg font-semibold tracking-tight text-neutral-100">
                     {{ site_name }}
                 </h1>
@@ -112,11 +132,11 @@
             <div class="flex items-center gap-6 text-xs text-neutral-400 tabular">
                 <div class="flex items-baseline gap-2">
                     <span class="text-neutral-600 uppercase tracking-wider text-[10px]">connected</span>
-                    <span class="text-neutral-100 text-base font-medium">{{ clients_connected }}</span>
+                    <span id="connected-count" class="text-neutral-100 text-base font-medium">{{ clients_connected }}</span>
                 </div>
                 <div class="flex items-baseline gap-2" title="{{ fetched_at_iso }}">
                     <span class="text-neutral-600 uppercase tracking-wider text-[10px]">last fetch</span>
-                    <span class="text-neutral-300">{{ fetched_at_local }}</span>
+                    <span id="last-fetch" class="text-neutral-300">{{ fetched_at_local }}</span>
                 </div>
                 {% if show_logout %}
                 <form method="post" action="/logout" class="flex">
@@ -132,45 +152,56 @@
 
     <div class="header-divider"></div>
 
-    {% if is_error %}
-    <div class="mt-5 rounded border border-red-900/60 bg-red-950/30 px-4 py-3 text-sm">
+    <div id="error-banner" class="mt-5 rounded border border-red-900/60 bg-red-950/30 px-4 py-3 text-sm {% if not is_error %}hidden{% endif %}">
         <div class="flex items-start gap-3">
             <span class="mt-1 inline-block h-2 w-2 rounded-full bg-red-400"></span>
             <div class="flex-1 min-w-0">
                 <p class="text-red-200 font-medium">Cannot reach the OpenVPN management interface</p>
-                <p class="mt-1 text-red-300/80 text-xs break-all">{{ error_message }}</p>
+                <p id="error-message" class="mt-1 text-red-300/80 text-xs break-all">{{ error_message or "" }}</p>
             </div>
         </div>
     </div>
-    {% endif %}
 
-    <section class="mt-6 overflow-hidden rounded border border-neutral-800 bg-neutral-950/40">
+    <div class="mt-6 flex items-center gap-3">
+        <input
+            id="search-input"
+            type="search"
+            placeholder="Filter by name or address…"
+            autocomplete="off"
+            spellcheck="false"
+            class="w-full max-w-sm rounded px-3 py-1.5"
+            aria-label="Filter clients"
+        >
+        <span id="filter-stats" class="text-[10px] uppercase tracking-[0.12em] text-neutral-600 tabular"></span>
+    </div>
+
+    <section class="mt-3 overflow-hidden rounded border border-neutral-800 bg-neutral-950/40">
         <div class="overflow-x-auto scroll-x">
             <table class="w-full text-sm">
                 <thead>
                     <tr class="text-[10px] uppercase tracking-[0.12em] text-neutral-500">
-                        <th class="text-left font-medium px-4 py-3 border-b border-neutral-800">Common name</th>
-                        <th class="text-left font-medium px-4 py-3 border-b border-neutral-800">Real address</th>
-                        <th class="text-left font-medium px-4 py-3 border-b border-neutral-800">Virtual</th>
-                        <th class="text-right font-medium px-4 py-3 border-b border-neutral-800">RX</th>
-                        <th class="text-right font-medium px-4 py-3 border-b border-neutral-800">TX</th>
-                        <th class="text-right font-medium px-4 py-3 border-b border-neutral-800">Connected</th>
+                        <th class="text-left font-medium px-4 py-3 border-b border-neutral-800" data-sort-key="common_name" data-sort-type="text">Common name<span class="sort-arrow"></span></th>
+                        <th class="text-left font-medium px-4 py-3 border-b border-neutral-800" data-sort-key="real_address_short" data-sort-type="text">Real address<span class="sort-arrow"></span></th>
+                        <th class="text-left font-medium px-4 py-3 border-b border-neutral-800" data-sort-key="virtual_address" data-sort-type="text">Virtual<span class="sort-arrow"></span></th>
+                        <th class="text-right font-medium px-4 py-3 border-b border-neutral-800" data-sort-key="bytes_received" data-sort-type="number">RX<span class="sort-arrow"></span></th>
+                        <th class="text-right font-medium px-4 py-3 border-b border-neutral-800" data-sort-key="bytes_sent" data-sort-type="number">TX<span class="sort-arrow"></span></th>
+                        <th class="text-right font-medium px-4 py-3 border-b border-neutral-800" data-sort-key="connected_for_seconds" data-sort-type="number">Connected<span class="sort-arrow"></span></th>
                     </tr>
                 </thead>
-                <tbody>
+                <tbody id="clients-tbody">
                     {% if rows %}
                         {% for row in rows %}
                         <tr class="border-b border-neutral-900 last:border-b-0">
                             <td class="px-4 py-2.5 text-neutral-100">{{ row.common_name }}</td>
                             <td class="px-4 py-2.5 text-neutral-300 tabular" title="{{ row.real_address_full }}">{{ row.real_address_short }}</td>
                             <td class="px-4 py-2.5 text-neutral-400 tabular">{{ row.virtual_address }}</td>
-                            <td class="px-4 py-2.5 text-right text-neutral-200 tabular">{{ row.bytes_received }}</td>
-                            <td class="px-4 py-2.5 text-right text-neutral-200 tabular">{{ row.bytes_sent }}</td>
+                            <td class="px-4 py-2.5 text-right text-neutral-200 tabular">{{ row.bytes_received_human }}</td>
+                            <td class="px-4 py-2.5 text-right text-neutral-200 tabular">{{ row.bytes_sent_human }}</td>
                             <td class="px-4 py-2.5 text-right text-neutral-300 tabular" title="{{ row.connected_absolute }}">{{ row.connected_relative }}</td>
                         </tr>
                         {% endfor %}
                     {% else %}
-                        <tr>
+                        <tr id="empty-row">
                             <td colspan="6" class="px-4 py-16 text-center">
                                 <div class="flex flex-col items-center gap-3">
                                     <span class="pulse-dot is-idle" aria-hidden="true"></span>
@@ -183,6 +214,14 @@
                         </tr>
                     {% endif %}
                 </tbody>
+                <tfoot id="totals-tfoot" class="{% if not rows %}hidden{% endif %}">
+                    <tr class="text-[10px] uppercase tracking-[0.12em] text-neutral-500 border-t border-neutral-800 bg-neutral-950/60">
+                        <td class="px-4 py-2.5 font-medium" colspan="3">Total</td>
+                        <td id="total-rx" class="px-4 py-2.5 text-right text-neutral-300 tabular">{{ total_bytes_received_human }}</td>
+                        <td id="total-tx" class="px-4 py-2.5 text-right text-neutral-300 tabular">{{ total_bytes_sent_human }}</td>
+                        <td id="total-count" class="px-4 py-2.5 text-right text-neutral-300 tabular">{{ clients_connected }}</td>
+                    </tr>
+                </tfoot>
             </table>
         </div>
     </section>
@@ -193,6 +232,213 @@
     </footer>
 
 </div>
+
+<script>
+(function () {
+    const REFRESH_MS = {{ refresh_seconds }} * 1000;
+    const STATE = {
+        clients: [],
+        sortKey: 'common_name',
+        sortDir: 'asc',
+        filter: '',
+    };
+
+    const tbody = document.getElementById('clients-tbody');
+    const tfoot = document.getElementById('totals-tfoot');
+    const totalRx = document.getElementById('total-rx');
+    const totalTx = document.getElementById('total-tx');
+    const totalCount = document.getElementById('total-count');
+    const connectedCount = document.getElementById('connected-count');
+    const lastFetch = document.getElementById('last-fetch');
+    const statusDot = document.getElementById('status-dot');
+    const errorBanner = document.getElementById('error-banner');
+    const errorMessage = document.getElementById('error-message');
+    const searchInput = document.getElementById('search-input');
+    const filterStats = document.getElementById('filter-stats');
+    const sortHeaders = document.querySelectorAll('th[data-sort-key]');
+
+    function escapeHtml(value) {
+        return String(value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function applyFilterAndSort() {
+        const needle = STATE.filter.trim().toLowerCase();
+        let rows = STATE.clients;
+        if (needle) {
+            rows = rows.filter(c =>
+                c.common_name.toLowerCase().includes(needle)
+                || c.real_address_full.toLowerCase().includes(needle)
+                || c.virtual_address.toLowerCase().includes(needle)
+            );
+        }
+
+        const key = STATE.sortKey;
+        const dir = STATE.sortDir === 'asc' ? 1 : -1;
+        const header = document.querySelector(`th[data-sort-key="${key}"]`);
+        const type = header ? header.dataset.sortType : 'text';
+        rows = rows.slice().sort((a, b) => {
+            const av = a[key];
+            const bv = b[key];
+            if (type === 'number') return (av - bv) * dir;
+            return String(av).localeCompare(String(bv), undefined, { sensitivity: 'base' }) * dir;
+        });
+        return rows;
+    }
+
+    function renderRows(rows) {
+        if (rows.length === 0) {
+            const total = STATE.clients.length;
+            const message = total === 0
+                ? 'No active sessions'
+                : 'No matches';
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="6" class="px-4 py-16 text-center">
+                        <div class="flex flex-col items-center gap-3">
+                            <span class="pulse-dot is-idle" aria-hidden="true"></span>
+                            <p class="text-neutral-500 text-sm">${escapeHtml(message)}</p>
+                        </div>
+                    </td>
+                </tr>`;
+            return;
+        }
+        const html = rows.map(c => `
+            <tr class="border-b border-neutral-900 last:border-b-0">
+                <td class="px-4 py-2.5 text-neutral-100">${escapeHtml(c.common_name)}</td>
+                <td class="px-4 py-2.5 text-neutral-300 tabular" title="${escapeHtml(c.real_address_full)}">${escapeHtml(c.real_address_short)}</td>
+                <td class="px-4 py-2.5 text-neutral-400 tabular">${escapeHtml(c.virtual_address)}</td>
+                <td class="px-4 py-2.5 text-right text-neutral-200 tabular">${escapeHtml(c.bytes_received_human)}</td>
+                <td class="px-4 py-2.5 text-right text-neutral-200 tabular">${escapeHtml(c.bytes_sent_human)}</td>
+                <td class="px-4 py-2.5 text-right text-neutral-300 tabular" title="${escapeHtml(c.connected_absolute)}">${escapeHtml(c.connected_relative)}</td>
+            </tr>`).join('');
+        tbody.innerHTML = html;
+    }
+
+    function renderTotals(rows) {
+        if (STATE.clients.length === 0) {
+            tfoot.classList.add('hidden');
+            return;
+        }
+        tfoot.classList.remove('hidden');
+        const sumRx = rows.reduce((acc, c) => acc + c.bytes_received, 0);
+        const sumTx = rows.reduce((acc, c) => acc + c.bytes_sent, 0);
+        totalRx.textContent = humanizeBytes(sumRx);
+        totalTx.textContent = humanizeBytes(sumTx);
+        totalCount.textContent = rows.length;
+    }
+
+    function renderFilterStats(rows) {
+        const total = STATE.clients.length;
+        if (!STATE.filter.trim() || total === 0) {
+            filterStats.textContent = '';
+            return;
+        }
+        filterStats.textContent = `${rows.length} / ${total} match` + (rows.length === 1 ? '' : 'es');
+    }
+
+    function renderSortIndicators() {
+        sortHeaders.forEach(h => {
+            const arrow = h.querySelector('.sort-arrow');
+            if (h.dataset.sortKey === STATE.sortKey) {
+                h.classList.add('sort-active');
+                arrow.textContent = STATE.sortDir === 'asc' ? '▲' : '▼';
+            } else {
+                h.classList.remove('sort-active');
+                arrow.textContent = '';
+            }
+        });
+    }
+
+    function render() {
+        const visible = applyFilterAndSort();
+        renderRows(visible);
+        renderTotals(visible);
+        renderFilterStats(visible);
+        renderSortIndicators();
+    }
+
+    function humanizeBytes(value) {
+        if (value < 1024) return `${value} B`;
+        const units = ['KB', 'MB', 'GB', 'TB', 'PB', 'EB'];
+        let size = value;
+        for (const unit of units) {
+            size /= 1024;
+            if (size < 1024) return `${size.toFixed(1)} ${unit}`;
+        }
+        return `${size.toFixed(1)} EB`;
+    }
+
+    function updateHeader(payload) {
+        connectedCount.textContent = payload.clients_connected;
+        lastFetch.textContent = payload.fetched_at_local;
+        statusDot.classList.remove('is-live', 'is-stale', 'is-error');
+        if (payload.is_error) statusDot.classList.add('is-error');
+        else if (payload.is_stale) statusDot.classList.add('is-stale');
+        else statusDot.classList.add('is-live');
+
+        if (payload.is_error) {
+            errorBanner.classList.remove('hidden');
+            errorMessage.textContent = payload.error || '';
+        } else {
+            errorBanner.classList.add('hidden');
+        }
+    }
+
+    async function fetchSnapshot() {
+        try {
+            const response = await fetch('/api/clients', {
+                credentials: 'same-origin',
+                headers: { 'Accept': 'application/json' },
+            });
+            if (response.status === 401 || response.status === 303) {
+                window.location.reload();
+                return;
+            }
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const payload = await response.json();
+            STATE.clients = payload.clients || [];
+            updateHeader(payload);
+            render();
+        } catch (err) {
+            statusDot.classList.remove('is-live', 'is-stale');
+            statusDot.classList.add('is-error');
+            errorBanner.classList.remove('hidden');
+            errorMessage.textContent = `fetch failed: ${err.message}`;
+        }
+    }
+
+    sortHeaders.forEach(h => {
+        h.addEventListener('click', () => {
+            const key = h.dataset.sortKey;
+            if (STATE.sortKey === key) {
+                STATE.sortDir = STATE.sortDir === 'asc' ? 'desc' : 'asc';
+            } else {
+                STATE.sortKey = key;
+                STATE.sortDir = 'asc';
+            }
+            render();
+        });
+    });
+
+    let filterTimer = null;
+    searchInput.addEventListener('input', () => {
+        clearTimeout(filterTimer);
+        filterTimer = setTimeout(() => {
+            STATE.filter = searchInput.value;
+            render();
+        }, 80);
+    });
+
+    fetchSnapshot();
+    setInterval(fetchSnapshot, REFRESH_MS);
+    renderSortIndicators();
+})();
+</script>
 
 </body>
 </html>

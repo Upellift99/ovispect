@@ -40,7 +40,7 @@ from ovispect.formatting import (
     seconds_since,
     strip_port,
 )
-from ovispect.ovpn import StatusSnapshot, fetch_status
+from ovispect.ovpn import Client, StatusSnapshot, fetch_status
 
 logger = logging.getLogger(__name__)
 
@@ -56,45 +56,70 @@ def _resolve_timezone(name: str) -> ZoneInfo:
         return ZoneInfo("UTC")
 
 
+def _format_client_row(client: Client, *, now: datetime) -> dict[str, Any]:
+    """Serialize a :class:`Client` for the dashboard.
+
+    Both raw integers (for client-side sorting) and pre-humanized strings
+    (for direct display) are emitted, so the same payload can drive the
+    SSR template *and* the JSON API.
+    """
+    connected_for = seconds_since(client.connected_since_t, now=now)
+    return {
+        "common_name": client.common_name,
+        "real_address_short": strip_port(client.real_address),
+        "real_address_full": client.real_address,
+        "virtual_address": client.virtual_address or "—",
+        "bytes_received": client.bytes_received,
+        "bytes_received_human": humanize_bytes(client.bytes_received),
+        "bytes_sent": client.bytes_sent,
+        "bytes_sent_human": humanize_bytes(client.bytes_sent),
+        "connected_for_seconds": connected_for,
+        "connected_relative": humanize_duration(connected_for),
+        "connected_absolute": client.connected_since,
+        "username": client.username,
+    }
+
+
+def _build_snapshot_payload(settings: Settings, snapshot: StatusSnapshot) -> dict[str, Any]:
+    """JSON-serializable view of the snapshot, shared by SSR and the JSON API."""
+    tz = _resolve_timezone(settings.timezone)
+    now = datetime.now(tz=UTC)
+    age_seconds = max(int((now - snapshot.fetched_at).total_seconds()), 0)
+    return {
+        "fetched_at_iso": snapshot.fetched_at.isoformat(),
+        "fetched_at_local": format_local_time(snapshot.fetched_at, tz=tz),
+        "is_stale": age_seconds > 30,
+        "is_error": snapshot.error is not None,
+        "error": snapshot.error,
+        "clients_connected": len(snapshot.clients),
+        "total_bytes_received": snapshot.total_bytes_received,
+        "total_bytes_sent": snapshot.total_bytes_sent,
+        "total_bytes_received_human": humanize_bytes(snapshot.total_bytes_received),
+        "total_bytes_sent_human": humanize_bytes(snapshot.total_bytes_sent),
+        "clients": [_format_client_row(c, now=now) for c in snapshot.clients],
+    }
+
+
 def _build_view_model(
     settings: Settings,
     snapshot: StatusSnapshot,
     *,
     auth_enabled: bool,
 ) -> dict[str, Any]:
-    tz = _resolve_timezone(settings.timezone)
-    now = datetime.now(tz=UTC)
-    age_seconds = max(int((now - snapshot.fetched_at).total_seconds()), 0)
-    is_stale = age_seconds > 30
-
-    rows: list[dict[str, Any]] = []
-    for client in snapshot.clients:
-        connected_for = seconds_since(client.connected_since_t, now=now)
-        rows.append(
-            {
-                "common_name": client.common_name,
-                "real_address_short": strip_port(client.real_address),
-                "real_address_full": client.real_address,
-                "virtual_address": client.virtual_address or "—",
-                "bytes_received": humanize_bytes(client.bytes_received),
-                "bytes_sent": humanize_bytes(client.bytes_sent),
-                "connected_relative": humanize_duration(connected_for),
-                "connected_absolute": client.connected_since,
-                "username": client.username,
-            }
-        )
-
+    payload = _build_snapshot_payload(settings, snapshot)
     return {
         "site_name": settings.site_name,
         "refresh_seconds": settings.refresh_seconds,
         "version": __version__,
-        "fetched_at_local": format_local_time(snapshot.fetched_at, tz=tz),
-        "fetched_at_iso": snapshot.fetched_at.isoformat(),
-        "is_stale": is_stale,
-        "is_error": snapshot.error is not None,
-        "error_message": snapshot.error,
-        "clients_connected": len(snapshot.clients),
-        "rows": rows,
+        "fetched_at_local": payload["fetched_at_local"],
+        "fetched_at_iso": payload["fetched_at_iso"],
+        "is_stale": payload["is_stale"],
+        "is_error": payload["is_error"],
+        "error_message": payload["error"],
+        "clients_connected": payload["clients_connected"],
+        "rows": payload["clients"],
+        "total_bytes_received_human": payload["total_bytes_received_human"],
+        "total_bytes_sent_human": payload["total_bytes_sent_human"],
         "show_logout": auth_enabled,
     }
 
@@ -149,6 +174,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
         context = _build_view_model(cfg, snapshot, auth_enabled=auth_enabled)
         return templates.TemplateResponse(request, "index.html", context)
+
+    @application.get(
+        "/api/clients",
+        response_class=JSONResponse,
+        dependencies=[Depends(require_auth)],
+    )
+    async def api_clients() -> dict[str, Any]:
+        snapshot = fetch_status(
+            cfg.openvpn_host,
+            cfg.openvpn_port,
+            password=cfg.openvpn_password.get_secret_value(),
+            timeout=cfg.management_timeout_seconds,
+        )
+        return _build_snapshot_payload(cfg, snapshot)
 
     @application.get("/metrics", response_class=PlainTextResponse)
     async def metrics() -> Response:

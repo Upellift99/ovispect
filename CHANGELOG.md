@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-05-06
+
+### Added
+
+- Sortable columns on the dashboard table — click any header to toggle
+  ascending/descending. Sorts use raw values (bytes, seconds) so RX/TX/
+  Connected sort numerically rather than lexicographically.
+- Live search input above the table, matching `Common Name`,
+  `Real Address`, and `Virtual` (case-insensitive substring). A
+  `N / Total matches` counter appears next to the input when filtering.
+- `<tfoot>` row with aggregate **Total RX**, **Total TX**, and the visible
+  client count (recomputed against the active filter).
+- New JSON endpoint `GET /api/clients` returning the full snapshot
+  (`fetched_at`, `is_error`, `total_*`, `clients[]` with both raw and
+  humanized values). Auth-protected when authentication is enabled.
+
+### Changed
+
+- The dashboard now refreshes via `fetch('/api/clients')` instead of a
+  full-page `<meta http-equiv="refresh">`. Consequence: the user's sort
+  order, search filter, and scroll position are preserved across ticks.
+- The view-model builder is factored around `_build_snapshot_payload` so
+  SSR (`/`) and JSON (`/api/clients`) emit identical data shapes.
+
 ## [0.2.2] - 2026-05-06
 
 ### Fixed
@@ -101,7 +125,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Test suite (41 tests) covering parser, formatting helpers, and HTTP
   routes via FastAPI's `TestClient`.
 
-[Unreleased]: https://github.com/Upellift99/ovispect/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/Upellift99/ovispect/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/Upellift99/ovispect/releases/tag/v0.3.0
 [0.2.2]: https://github.com/Upellift99/ovispect/releases/tag/v0.2.2
 [0.2.1]: https://github.com/Upellift99/ovispect/releases/tag/v0.2.1
 [0.2.0]: https://github.com/Upellift99/ovispect/releases/tag/v0.2.0
