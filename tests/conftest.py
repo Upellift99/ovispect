@@ -14,7 +14,7 @@ from ovispect import app as app_module
 from ovispect.config import Settings
 from ovispect.ovpn import StatusSnapshot
 
-PLAIN_PASSWORD = "correct horse battery staple"
+PLAIN_PASSWORD = "correct horse battery staple"  # pragma: allowlist secret
 
 
 def make_bcrypt_hash(plain: str = PLAIN_PASSWORD) -> str:
@@ -64,7 +64,7 @@ def settings_with_auth(auth_hash: str) -> Settings:
         timezone="UTC",
         auth_username="admin",
         auth_password_hash=auth_hash,
-        session_secret="x" * 64,
+        session_secret="x" * 64,  # pragma: allowlist secret
         session_cookie_secure=False,  # TestClient does not negotiate TLS.
     )
 

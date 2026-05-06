@@ -48,7 +48,7 @@ dev = [
 
 [project.scripts]
 ovispect = "ovispect.__main__:main"
-ovispect-hash-password = "ovispect.hash_password:main"
+ovispect-hash-password = "ovispect.hash_password:main"  # pragma: allowlist secret
 
 [project.urls]
 Homepage = "https://github.com/Upellift99/ovispect"
@@ -128,7 +128,10 @@ filterwarnings = ["error"]
 [tool.coverage.run]
 branch = true
 source = ["src/ovispect"]
-omit = ["src/ovispect/__main__.py"]
+omit = [
+    "src/ovispect/__main__.py",
+    "src/ovispect/hash_password.py",
+]
 
 [tool.coverage.report]
 show_missing = true

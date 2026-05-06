@@ -45,7 +45,7 @@ def test_is_auth_enabled_true_for_configured_hash() -> None:
         openvpn_host="127.0.0.1",
         openvpn_port=5555,
         auth_password_hash=make_bcrypt_hash(),
-        session_secret="x" * 64,
+        session_secret="x" * 64,  # pragma: allowlist secret
     )
     assert is_auth_enabled(s) is True
 

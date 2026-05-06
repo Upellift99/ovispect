@@ -179,7 +179,7 @@ def test_login_submit_with_correct_credentials_sets_session(client_with_auth) ->
 def test_login_submit_with_wrong_password_returns_401(client_with_auth) -> None:  # type: ignore[no-untyped-def]
     response = client_with_auth.post(
         "/login",
-        data={"username": "admin", "password": "wrong"},
+        data={"username": "admin", "password": "wrong"},  # pragma: allowlist secret
     )
     assert response.status_code == 401
     assert "Invalid credentials" in response.text
@@ -229,16 +229,11 @@ def test_logout_clears_session(client_with_auth) -> None:  # type: ignore[no-unt
 
 
 def test_login_rate_limit_blocks_after_repeated_failures(client_with_auth) -> None:  # type: ignore[no-untyped-def]
+    bad_creds = {"username": "admin", "password": "wrong"}  # pragma: allowlist secret
     for _ in range(5):
-        response = client_with_auth.post(
-            "/login",
-            data={"username": "admin", "password": "wrong"},
-        )
+        response = client_with_auth.post("/login", data=bad_creds)
         assert response.status_code == 401
 
-    response = client_with_auth.post(
-        "/login",
-        data={"username": "admin", "password": "wrong"},
-    )
+    response = client_with_auth.post("/login", data=bad_creds)
     assert response.status_code == 429
     assert "Too many failed attempts" in response.text
