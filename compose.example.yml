@@ -1,9 +1,19 @@
-# Drop-in example compose file. Copy to compose.yml and edit the env block.
+# Standalone deployment with ovispect's built-in authentication.
 #
-# Run with:
+# Generate AUTH_PASSWORD_HASH once with:
+#     python -m ovispect.hash_password
+# (or `htpasswd -nbB admin "yourpassword" | cut -d: -f2` if you have apache2-utils)
+#
+# Generate a session secret:
+#     openssl rand -hex 32
+#
+# Then run with:
 #     docker compose up -d
 #
-# Then open http://localhost:8000
+# Open http://localhost:8000 and sign in.
+#
+# Production: terminate TLS in front of ovispect (Caddy/Traefik/nginx) so
+# that SESSION_COOKIE_SECURE=true is honoured by the browser.
 
 services:
   ovispect:
@@ -20,6 +30,12 @@ services:
       REFRESH_SECONDS: "10"
       TIMEZONE: UTC
       LOG_LEVEL: INFO
+
+      AUTH_USERNAME: admin
+      AUTH_PASSWORD_HASH: ${AUTH_PASSWORD_HASH}    # bcrypt hash, see header
+      SESSION_SECRET: ${SESSION_SECRET}            # `openssl rand -hex 32`
+      SESSION_LIFETIME_SECONDS: "86400"
+      SESSION_COOKIE_SECURE: "true"
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:8000/healthz"]
       interval: 30s

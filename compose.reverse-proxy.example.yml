@@ -1,0 +1,34 @@
+# Reverse-proxy deployment: ovispect runs without built-in authentication
+# and trusts the upstream proxy to handle access control (basic auth,
+# oauth2-proxy, BunkerWeb, etc.).
+#
+# This was the only deployment shape supported in ovispect 0.1; in 0.2 it
+# remains fully supported as Mode 2 of the README's Authentication section.
+
+services:
+  ovispect:
+    image: ghcr.io/Upellift99/ovispect:latest
+    container_name: ovispect
+    restart: unless-stopped
+    expose:
+      - "8000"
+    environment:
+      OPENVPN_HOST: 10.0.0.5
+      OPENVPN_PORT: "5555"
+      # OPENVPN_PASSWORD: changeme
+      SITE_NAME: My VPN
+      REFRESH_SECONDS: "10"
+      TIMEZONE: UTC
+      LOG_LEVEL: INFO
+      # AUTH_PASSWORD_HASH intentionally unset — auth is upstream's job.
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:8000/healthz"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true

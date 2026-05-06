@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-05-06
+
+### Added
+
+- Optional built-in form-based authentication with bcrypt password hashing.
+  Disabled by default — set `AUTH_PASSWORD_HASH` to enable.
+- Session cookies signed via Starlette's `SessionMiddleware` with
+  `SameSite=Strict`, configurable lifetime, and `Secure` flag.
+- In-memory rate limiting on the login endpoint (5 failed attempts per IP
+  per 5-minute window, then a 5-minute lockout).
+- `python -m ovispect.hash_password` (also installed as
+  `ovispect-hash-password`) CLI helper to mint `AUTH_PASSWORD_HASH` values.
+- Sign-out control in the dashboard header when authentication is enabled.
+- New env vars: `AUTH_USERNAME`, `AUTH_PASSWORD_HASH`, `SESSION_SECRET`,
+  `SESSION_LIFETIME_SECONDS`, `SESSION_COOKIE_NAME`, `SESSION_COOKIE_SECURE`.
+- `compose.reverse-proxy.example.yml`: standalone v0.1-style deployment
+  alongside the new built-in-auth example.
+
+### Changed
+
+- README's *Authentication* section rewritten to document the two
+  deployment modes (standalone vs reverse-proxy).
+- `compose.example.yml` now demonstrates the standalone-with-auth setup.
+- Test suite grown from 41 to 82 tests; coverage stays at 95%+.
+
+### Security
+
+- Login uses POST-only flow with `SameSite=Strict` cookies, generic
+  "Invalid credentials" error to prevent username enumeration, and an
+  open-redirect-safe `next=` parameter.
+- Strict startup validation: refuses to boot when `AUTH_PASSWORD_HASH` is
+  set with a `SESSION_SECRET` shorter than 32 chars or with a value that
+  is not a valid bcrypt hash.
+
 ## [0.1.0] - 2026-05-06
 
 ### Added
@@ -33,5 +67,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Test suite (41 tests) covering parser, formatting helpers, and HTTP
   routes via FastAPI's `TestClient`.
 
-[Unreleased]: https://github.com/Upellift99/ovispect/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/Upellift99/ovispect/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/Upellift99/ovispect/releases/tag/v0.2.0
 [0.1.0]: https://github.com/Upellift99/ovispect/releases/tag/v0.1.0

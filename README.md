@@ -93,19 +93,71 @@ Then set `OPENVPN_PASSWORD` in ovispect to the same value.
 
 ## Authentication
 
-**ovispect does not provide authentication.** This is intentional: the
-dashboard is a thin read-only view, and authentication is solved better at
-the reverse proxy layer. Three patterns most users adopt:
+ovispect supports two deployment modes; pick whichever fits your stack.
 
-1. **HTTP basic auth via nginx / Caddy** — the simplest option for personal
-   instances.
-2. **`oauth2-proxy` in front of ovispect** — wires up Google, GitHub, Keycloak,
-   or any OIDC provider.
-3. **BunkerWeb / Authelia / Authentik** — for users who already run a unified
-   identity layer for their internal tools.
+### Mode 1 — Built-in authentication (standalone)
+
+Generate a bcrypt hash:
+
+```bash
+python -m ovispect.hash_password
+# or, once installed:
+ovispect-hash-password
+```
+
+If you do not have ovispect installed locally, the equivalent one-liner with
+`apache2-utils` is:
+
+```bash
+htpasswd -nbB admin "yourpassword" | cut -d: -f2
+```
+
+Set the env vars:
+
+```env
+AUTH_USERNAME=admin
+AUTH_PASSWORD_HASH=$2b$12$........................................................
+SESSION_SECRET=$(openssl rand -hex 32)
+```
+
+That's it — visit `/`, you'll be redirected to a login form. Successful
+sign-ins set a `SameSite=Strict` session cookie that lasts
+`SESSION_LIFETIME_SECONDS` (24h by default). `/healthz` stays public for
+container health checks.
+
+A failed-login rate limit applies (5 failures per IP per 5 minutes, then a
+5-minute lockout). It is process-local; for fleet-wide protection put a WAF
+or fail2ban in front.
+
+> **Run ovispect behind HTTPS in standalone mode.** `SESSION_COOKIE_SECURE`
+> is `true` by default — only flip it to `false` for local plaintext
+> testing. For production, terminate TLS with Caddy, Traefik (Let's
+> Encrypt), or any other reverse proxy.
+
+### Mode 2 — Reverse proxy (multi-user, SSO, etc.)
+
+Leave `AUTH_PASSWORD_HASH` empty or unset. ovispect will not enforce any
+authentication and the request reaching it is trusted. Common front-ends:
+
+- nginx + basic auth
+- oauth2-proxy + your favorite IdP (Keycloak, Authelia, etc.)
+- Caddy with `basicauth` or `forward_auth`
+- Traefik forward-auth middleware
+- BunkerWeb with auth plugins
 
 Whichever you pick, never expose ovispect (or the OpenVPN management
 interface) directly to the public internet.
+
+### Auth-related environment variables
+
+| Variable                   | Default              | Notes                                                        |
+|----------------------------|----------------------|--------------------------------------------------------------|
+| `AUTH_USERNAME`            | `admin`              | Username expected at sign-in                                 |
+| `AUTH_PASSWORD_HASH`       | (empty)              | Bcrypt hash. **Empty disables built-in auth.**               |
+| `SESSION_SECRET`           | (empty)              | ≥ 32 chars. Required iff `AUTH_PASSWORD_HASH` is set.        |
+| `SESSION_LIFETIME_SECONDS` | `86400`              | Session cookie max-age (60 to 30 days)                       |
+| `SESSION_COOKIE_NAME`      | `ovispect_session`   | Cookie name                                                  |
+| `SESSION_COOKIE_SECURE`    | `true`               | `Secure` flag. Disable only for local plaintext testing.     |
 
 ## Migration from `openvpn-monitor`
 
