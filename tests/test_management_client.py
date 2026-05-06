@@ -78,6 +78,18 @@ def test_query_management_returns_payload_without_password(patch_socket) -> None
     assert b"quit\n" in fake.sent
 
 
+def test_query_management_accepts_crlf_terminated_responses(patch_socket) -> None:  # type: ignore[no-untyped-def]
+    """OpenVPN's management interface terminates lines with CRLF on most builds."""
+    crlf_payload = _status_payload().replace(b"\n", b"\r\n")
+    fake = FakeSocket(responses=[b">INFO: hi\r\n", crlf_payload])
+    patch_socket(fake)
+
+    result = query_management("127.0.0.1", 5555)
+
+    assert "CLIENT_LIST\tdave" in result
+    assert "END" not in result.splitlines()[-1]
+
+
 def test_query_management_sends_password_when_configured(patch_socket) -> None:  # type: ignore[no-untyped-def]
     fake = FakeSocket(
         responses=[

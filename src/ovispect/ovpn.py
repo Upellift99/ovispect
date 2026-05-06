@@ -16,7 +16,7 @@ from datetime import UTC, datetime
 
 logger = logging.getLogger(__name__)
 
-_END_MARKER = b"\nEND\n"
+_END_MARKERS: tuple[bytes, ...] = (b"\nEND\r\n", b"\nEND\n")
 _RECV_CHUNK = 4096
 
 
@@ -107,14 +107,21 @@ def parse_status3(payload: str) -> list[Client]:
     return clients
 
 
-def _recv_until(sock: socket.socket, marker: bytes, timeout: float) -> bytes:
-    """Read from ``sock`` until ``marker`` is observed in the cumulative buffer.
+def _recv_until(
+    sock: socket.socket,
+    markers: tuple[bytes, ...] | bytes,
+    timeout: float,
+) -> bytes:
+    """Read from ``sock`` until any of ``markers`` is observed in the cumulative buffer.
 
-    Raises :class:`ManagementError` on timeout or premature EOF.
+    Raises :class:`ManagementError` on timeout or premature EOF. Accepting a
+    tuple lets callers match line terminators that differ between OpenVPN
+    builds (CRLF on most platforms, LF on some).
     """
+    targets: tuple[bytes, ...] = (markers,) if isinstance(markers, bytes) else markers
     sock.settimeout(timeout)
     buffer = bytearray()
-    while marker not in buffer:
+    while not any(m in buffer for m in targets):
         try:
             chunk = sock.recv(_RECV_CHUNK)
         except TimeoutError as exc:
@@ -156,13 +163,13 @@ def query_management(
                     raise ManagementError("management authentication failed")
 
             sock.sendall(b"status 3\n")
-            raw = _recv_until(sock, _END_MARKER, timeout)
+            raw = _recv_until(sock, _END_MARKERS, timeout)
 
             with contextlib.suppress(OSError):
                 sock.sendall(b"quit\n")
 
             text = raw.decode("utf-8", errors="replace")
-            end_idx = text.rfind("\nEND\n")
+            end_idx = max(text.rfind("\nEND\r\n"), text.rfind("\nEND\n"))
             return text[:end_idx] if end_idx != -1 else text
     except ManagementError:
         raise
