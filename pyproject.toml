@@ -124,6 +124,7 @@ filterwarnings = ["error"]
 [tool.coverage.run]
 branch = true
 source = ["src/ovispect"]
+omit = ["src/ovispect/__main__.py"]
 
 [tool.coverage.report]
 show_missing = true
