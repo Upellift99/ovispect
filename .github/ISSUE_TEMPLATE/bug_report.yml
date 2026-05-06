@@ -12,7 +12,7 @@ body:
     id: ovispect-version
     attributes:
       label: ovispect version
-      description: Image tag (e.g. `ghcr.io/<OWNER>/ovispect:0.1.0`) or commit SHA if running from source.
+      description: Image tag (e.g. `ghcr.io/Upellift99/ovispect:0.1.0`) or commit SHA if running from source.
       placeholder: "0.1.0"
     validations:
       required: true

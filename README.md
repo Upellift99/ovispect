@@ -1,9 +1,9 @@
 # ovispect
 
-[![CI](https://github.com/<OWNER>/ovispect/actions/workflows/ci.yml/badge.svg)](https://github.com/<OWNER>/ovispect/actions/workflows/ci.yml)
+[![CI](https://github.com/Upellift99/ovispect/actions/workflows/ci.yml/badge.svg)](https://github.com/Upellift99/ovispect/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/)
-[![Image size](https://ghcr-badge.egpl.dev/<OWNER>/ovispect/size?color=blue)](https://github.com/<OWNER>/ovispect/pkgs/container/ovispect)
+[![Image size](https://ghcr-badge.egpl.dev/Upellift99/ovispect/size?color=blue)](https://github.com/Upellift99/ovispect/pkgs/container/ovispect)
 
 A lightweight, modern dashboard for OpenVPN's management interface. ovispect
 gives you an at-a-glance view of who is connected to your OpenVPN server, with
@@ -44,7 +44,7 @@ docker run -d \
     -e OPENVPN_HOST=10.0.0.5 \
     -e OPENVPN_PORT=5555 \
     -p 8000:8000 \
-    ghcr.io/<OWNER>/ovispect:latest
+    ghcr.io/Upellift99/ovispect:latest
 ```
 
 Then open <http://localhost:8000>.
@@ -127,7 +127,7 @@ After:
 ```yaml
 services:
   ovispect:
-    image: ghcr.io/<OWNER>/ovispect:latest
+    image: ghcr.io/Upellift99/ovispect:latest
     environment:
       OPENVPN_HOST: 10.0.0.5
       OPENVPN_PORT: 5555
@@ -167,7 +167,7 @@ docker run --rm -e OPENVPN_HOST=10.0.0.5 -e OPENVPN_PORT=5555 -p 8000:8000 ovisp
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). Bug reports and feature requests are
-welcome via [GitHub Issues](https://github.com/<OWNER>/ovispect/issues).
+welcome via [GitHub Issues](https://github.com/Upellift99/ovispect/issues).
 
 ## Security
 

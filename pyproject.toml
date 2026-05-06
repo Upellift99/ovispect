@@ -47,10 +47,10 @@ dev = [
 ovispect = "ovispect.__main__:main"
 
 [project.urls]
-Homepage = "https://github.com/<OWNER>/ovispect"
-Repository = "https://github.com/<OWNER>/ovispect"
-Issues = "https://github.com/<OWNER>/ovispect/issues"
-Changelog = "https://github.com/<OWNER>/ovispect/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/Upellift99/ovispect"
+Repository = "https://github.com/Upellift99/ovispect"
+Issues = "https://github.com/Upellift99/ovispect/issues"
+Changelog = "https://github.com/Upellift99/ovispect/blob/main/CHANGELOG.md"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/ovispect"]

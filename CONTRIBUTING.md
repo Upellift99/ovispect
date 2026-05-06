@@ -11,7 +11,7 @@ management interface. The README's *Why ovispect?* section spells out what
 the project intentionally does **not** do (GeoIP, persistence, alerting,
 multi-server fleets, in-app authentication, …). PRs that expand the scope in
 those directions will likely be declined — please open a
-[Discussion](https://github.com/<OWNER>/ovispect/discussions) first.
+[Discussion](https://github.com/Upellift99/ovispect/discussions) first.
 
 Good first issues:
 

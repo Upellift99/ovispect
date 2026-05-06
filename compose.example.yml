@@ -7,7 +7,7 @@
 
 services:
   ovispect:
-    image: ghcr.io/<OWNER>/ovispect:latest
+    image: ghcr.io/Upellift99/ovispect:latest
     container_name: ovispect
     restart: unless-stopped
     ports:

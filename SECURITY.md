@@ -15,15 +15,19 @@ to reflect a multi-version support matrix.
 
 **Do not open a public GitHub issue for security vulnerabilities.**
 
-Please email `<MAINTAINER_EMAIL>` with:
+Please open a private report via GitHub Security Advisories:
+<https://github.com/Upellift99/ovispect/security/advisories/new>
+
+Include in your report:
 
 - A description of the issue and its impact
 - Steps to reproduce (a minimal proof of concept is ideal)
 - The version of ovispect (`ovispect:<tag>` or commit SHA)
 - Your environment (Docker, native, reverse proxy in front, etc.)
 
-You can also submit a private vulnerability report through GitHub Security
-Advisories on this repository if you prefer.
+GitHub Security Advisories give you a private, end-to-end audit trail with
+the maintainers and let us coordinate the fix, the CVE, and the public
+disclosure all in one place — there is no email channel by design.
 
 ### Response targets
 
@@ -33,7 +37,7 @@ Advisories on this repository if you prefer.
   More complex issues may take longer; we will keep you informed.
 
 Confirmed vulnerabilities are disclosed via
-[GitHub Security Advisories](https://github.com/<OWNER>/ovispect/security/advisories)
+[GitHub Security Advisories](https://github.com/Upellift99/ovispect/security/advisories)
 and assigned a CVE when applicable. Reporters are credited unless they ask
 to remain anonymous.
 
@@ -42,7 +46,7 @@ to remain anonymous.
 In scope:
 
 - The ovispect application code (anything under `src/`)
-- The published container image (`ghcr.io/<OWNER>/ovispect`)
+- The published container image (`ghcr.io/Upellift99/ovispect`)
 - The published documentation, where it could mislead operators into an
   insecure configuration
 

@@ -33,5 +33,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Test suite (41 tests) covering parser, formatting helpers, and HTTP
   routes via FastAPI's `TestClient`.
 
-[Unreleased]: https://github.com/<OWNER>/ovispect/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/<OWNER>/ovispect/releases/tag/v0.1.0
+[Unreleased]: https://github.com/Upellift99/ovispect/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/Upellift99/ovispect/releases/tag/v0.1.0
