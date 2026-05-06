@@ -13,7 +13,8 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  # Lowercased on purpose: GHCR rejects uppercase paths.
+  IMAGE_NAME: upellift99/ovispect
 
 jobs:
   release:

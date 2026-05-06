@@ -46,7 +46,7 @@ to remain anonymous.
 In scope:
 
 - The ovispect application code (anything under `src/`)
-- The published container image (`ghcr.io/Upellift99/ovispect`)
+- The published container image (`ghcr.io/upellift99/ovispect`)
 - The published documentation, where it could mislead operators into an
   insecure configuration
 

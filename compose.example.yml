@@ -1,41 +1,41 @@
 # Standalone deployment with ovispect's built-in authentication.
 #
-# Generate AUTH_PASSWORD_HASH once with:
-#     python -m ovispect.hash_password
-# (or `htpasswd -nbB admin "yourpassword" | cut -d: -f2` if you have apache2-utils)
+# 1. Copy `.env.example` to `.env` and fill in:
+#       AUTH_PASSWORD_HASH=$(python -m ovispect.hash_password)
+#       SESSION_SECRET=$(openssl rand -hex 32)
+#       OPENVPN_HOST=...
+#       OPENVPN_PORT=...
+#       AUTH_USERNAME=...   # optional, defaults to "admin"
+#       (any other override you need)
 #
-# Generate a session secret:
-#     openssl rand -hex 32
+# 2. Run:  docker compose up -d
 #
-# Then run with:
-#     docker compose up -d
-#
-# Open http://localhost:8000 and sign in.
+# 3. Open http://localhost:8000 and sign in.
 #
 # Production: terminate TLS in front of ovispect (Caddy/Traefik/nginx) so
-# that SESSION_COOKIE_SECURE=true is honoured by the browser.
+# SESSION_COOKIE_SECURE=true is honoured by the browser.
 
 services:
   ovispect:
-    image: ghcr.io/Upellift99/ovispect:latest
+    image: ghcr.io/upellift99/ovispect:latest
     container_name: ovispect
     restart: unless-stopped
     ports:
       - "127.0.0.1:8000:8000"
     environment:
-      OPENVPN_HOST: 10.0.0.5
-      OPENVPN_PORT: "5555"
-      # OPENVPN_PASSWORD: changeme
-      SITE_NAME: My VPN
-      REFRESH_SECONDS: "10"
-      TIMEZONE: UTC
-      LOG_LEVEL: INFO
+      OPENVPN_HOST: ${OPENVPN_HOST:?set OPENVPN_HOST in .env}
+      OPENVPN_PORT: ${OPENVPN_PORT:?set OPENVPN_PORT in .env}
+      OPENVPN_PASSWORD: ${OPENVPN_PASSWORD:-}
+      SITE_NAME: ${SITE_NAME:-OpenVPN}
+      REFRESH_SECONDS: ${REFRESH_SECONDS:-10}
+      TIMEZONE: ${TIMEZONE:-UTC}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
 
-      AUTH_USERNAME: admin
-      AUTH_PASSWORD_HASH: ${AUTH_PASSWORD_HASH}    # bcrypt hash, see header
-      SESSION_SECRET: ${SESSION_SECRET}            # `openssl rand -hex 32`
-      SESSION_LIFETIME_SECONDS: "86400"
-      SESSION_COOKIE_SECURE: "true"
+      AUTH_USERNAME: ${AUTH_USERNAME:-admin}
+      AUTH_PASSWORD_HASH: ${AUTH_PASSWORD_HASH:?set AUTH_PASSWORD_HASH in .env}
+      SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET in .env}
+      SESSION_LIFETIME_SECONDS: ${SESSION_LIFETIME_SECONDS:-86400}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-true}
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:8000/healthz"]
       interval: 30s
