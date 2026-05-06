@@ -26,20 +26,30 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    openvpn_host: str = Field(..., description="Hostname or IP of the OpenVPN management interface.")
-    openvpn_port: int = Field(..., ge=1, le=65535, description="TCP port of the management interface.")
+    openvpn_host: str = Field(
+        ..., description="Hostname or IP of the OpenVPN management interface."
+    )
+    openvpn_port: int = Field(
+        ..., ge=1, le=65535, description="TCP port of the management interface."
+    )
     openvpn_password: SecretStr = Field(
         default=SecretStr(""),
         description="Optional management interface password.",
     )
 
-    site_name: str = Field(default="OpenVPN", description="Display name shown in the dashboard header.")
-    refresh_seconds: int = Field(default=10, ge=1, le=3600, description="Auto-refresh interval in seconds.")
+    site_name: str = Field(
+        default="OpenVPN", description="Display name shown in the dashboard header."
+    )
+    refresh_seconds: int = Field(
+        default=10, ge=1, le=3600, description="Auto-refresh interval in seconds."
+    )
     timezone: str = Field(default="UTC", description="IANA timezone for displayed timestamps.")
     log_level: LogLevel = Field(default="INFO", description="Application log level.")
 
-    bind_host: str = Field(default="0.0.0.0", description="Address the HTTP server binds to.")  # noqa: S104
-    bind_port: int = Field(default=8000, ge=1, le=65535, description="Port the HTTP server binds to.")
+    bind_host: str = Field(default="0.0.0.0", description="Address the HTTP server binds to.")
+    bind_port: int = Field(
+        default=8000, ge=1, le=65535, description="Port the HTTP server binds to."
+    )
 
     management_timeout_seconds: float = Field(
         default=5.0,

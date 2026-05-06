@@ -8,10 +8,11 @@ client is intentionally minimal: connect, optional password, ``status 3``,
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import socket
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 logger = logging.getLogger(__name__)
 
@@ -157,10 +158,8 @@ def query_management(
             sock.sendall(b"status 3\n")
             raw = _recv_until(sock, _END_MARKER, timeout)
 
-            try:
+            with contextlib.suppress(OSError):
                 sock.sendall(b"quit\n")
-            except OSError:
-                pass
 
             text = raw.decode("utf-8", errors="replace")
             end_idx = text.rfind("\nEND\n")
@@ -183,7 +182,7 @@ def fetch_status(
     On any error this returns a snapshot with ``error`` set and an empty
     client list, so callers (i.e. the FastAPI route) can render gracefully.
     """
-    fetched_at = datetime.now(tz=timezone.utc)
+    fetched_at = datetime.now(tz=UTC)
     try:
         payload = query_management(host, port, password=password, timeout=timeout)
     except ManagementError as exc:

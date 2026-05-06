@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, tzinfo
 
 _BYTE_UNITS: tuple[str, ...] = ("B", "KB", "MB", "GB", "TB", "PB", "EB")
 
@@ -87,9 +87,9 @@ def strip_port(real_address: str) -> str:
     return real_address
 
 
-def format_local_time(dt: datetime, tz: timezone | None = None) -> str:
+def format_local_time(dt: datetime, tz: tzinfo | None = None) -> str:
     """Format a datetime as ``HH:MM:SS`` in the supplied timezone (UTC by default)."""
-    target = tz if tz is not None else timezone.utc
+    target: tzinfo = tz if tz is not None else UTC
     return dt.astimezone(target).strftime("%H:%M:%S")
 
 
@@ -99,12 +99,12 @@ def seconds_since(epoch: int, *, now: datetime | None = None) -> int:
     Negative deltas (clock skew) are clamped to zero so that the UI never
     displays a negative connection duration.
     """
-    reference = now if now is not None else datetime.now(tz=timezone.utc)
-    delta = reference - datetime.fromtimestamp(epoch, tz=timezone.utc)
+    reference = now if now is not None else datetime.now(tz=UTC)
+    delta = reference - datetime.fromtimestamp(epoch, tz=UTC)
     return max(int(delta.total_seconds()), 0)
 
 
 def staleness(last_fetch: datetime, *, now: datetime | None = None) -> timedelta:
     """Return how long ago the most recent successful fetch happened."""
-    reference = now if now is not None else datetime.now(tz=timezone.utc)
+    reference = now if now is not None else datetime.now(tz=UTC)
     return reference - last_fetch

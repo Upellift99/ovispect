@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -39,7 +39,7 @@ def _resolve_timezone(name: str) -> ZoneInfo:
 
 def _build_view_model(settings: Settings, snapshot: StatusSnapshot) -> dict[str, Any]:
     tz = _resolve_timezone(settings.timezone)
-    now = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=UTC)
     age_seconds = max(int((now - snapshot.fetched_at).total_seconds()), 0)
     is_stale = age_seconds > 30
 
