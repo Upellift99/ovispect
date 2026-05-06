@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ovispect"
-version = "0.1.0"
+version = "0.2.0"
 description = "A lightweight, modern dashboard for OpenVPN's management interface."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -30,6 +30,9 @@ dependencies = [
     "jinja2>=3.1",
     "pydantic>=2.6",
     "pydantic-settings>=2.2",
+    "python-multipart>=0.0.9",
+    "itsdangerous>=2.2",
+    "bcrypt>=4.1",
 ]
 
 [project.optional-dependencies]
@@ -45,6 +48,7 @@ dev = [
 
 [project.scripts]
 ovispect = "ovispect.__main__:main"
+ovispect-hash-password = "ovispect.hash_password:main"
 
 [project.urls]
 Homepage = "https://github.com/Upellift99/ovispect"
