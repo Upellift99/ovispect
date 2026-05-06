@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en" class="bg-neutral-950">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="refresh" content="{{ refresh_seconds }}">
+    <meta name="color-scheme" content="dark">
+    <meta name="robots" content="noindex, nofollow">
+    <title>{{ site_name }} — ovispect</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=IBM+Plex+Sans:wght@500;600&display=swap" rel="stylesheet">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        mono: ['"IBM Plex Mono"', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+                        sans: ['"IBM Plex Sans"', 'system-ui', 'sans-serif'],
+                    },
+                    colors: {
+                        surface: '#141414',
+                        base: '#0a0a0a',
+                    },
+                },
+            },
+            corePlugins: {
+                preflight: true,
+            },
+        };
+    </script>
+
+    <style>
+        html, body { background-color: #0a0a0a; }
+        body {
+            color: #e5e5e5;
+            font-family: '"IBM Plex Mono"', ui-monospace, monospace;
+            font-feature-settings: "tnum" 1, "calt" 0;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+        .tabular { font-variant-numeric: tabular-nums; }
+
+        .header-divider {
+            height: 1px;
+            background: linear-gradient(90deg, rgba(74, 222, 128, 0.45) 0%, rgba(74, 222, 128, 0.15) 25%, transparent 65%);
+        }
+
+        .pulse-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 9999px;
+            display: inline-block;
+            animation: pulse 2s ease-in-out infinite;
+        }
+        .pulse-dot.is-live {
+            background-color: #4ade80;
+            box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.45);
+        }
+        .pulse-dot.is-stale {
+            background-color: #fbbf24;
+            box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.4);
+        }
+        .pulse-dot.is-error {
+            background-color: #f87171;
+            box-shadow: 0 0 0 0 rgba(248, 113, 113, 0.4);
+        }
+        .pulse-dot.is-idle {
+            background-color: #404040;
+            animation: none;
+            box-shadow: none;
+        }
+        @keyframes pulse {
+            0%   { opacity: 0.45; box-shadow: 0 0 0 0     rgba(74, 222, 128, 0.45); }
+            50%  { opacity: 1.0;  box-shadow: 0 0 0 6px   rgba(74, 222, 128, 0.0);  }
+            100% { opacity: 0.45; box-shadow: 0 0 0 0     rgba(74, 222, 128, 0.0);  }
+        }
+
+        tbody tr { transition: background-color 120ms ease-in-out; }
+        tbody tr:hover { background-color: rgba(23, 23, 23, 0.55); }
+
+        ::selection { background: rgba(74, 222, 128, 0.25); color: #f5f5f5; }
+
+        .scroll-x { scrollbar-color: #262626 transparent; scrollbar-width: thin; }
+        .scroll-x::-webkit-scrollbar { height: 6px; }
+        .scroll-x::-webkit-scrollbar-thumb { background: #262626; border-radius: 3px; }
+    </style>
+</head>
+<body class="min-h-screen font-mono antialiased">
+
+<div class="mx-auto max-w-6xl px-6 pt-10 pb-16">
+
+    <header class="pb-5">
+        <div class="flex items-center justify-between gap-6 flex-wrap">
+            <div class="flex items-center gap-3">
+                {% if is_error %}
+                    <span class="pulse-dot is-error" aria-hidden="true"></span>
+                {% elif is_stale %}
+                    <span class="pulse-dot is-stale" aria-hidden="true"></span>
+                {% else %}
+                    <span class="pulse-dot is-live" aria-hidden="true"></span>
+                {% endif %}
+                <h1 class="font-sans text-lg font-semibold tracking-tight text-neutral-100">
+                    {{ site_name }}
+                </h1>
+                <span class="text-neutral-600 text-xs tracking-wide uppercase">/ ovispect</span>
+            </div>
+
+            <div class="flex items-center gap-6 text-xs text-neutral-400 tabular">
+                <div class="flex items-baseline gap-2">
+                    <span class="text-neutral-600 uppercase tracking-wider text-[10px]">connected</span>
+                    <span class="text-neutral-100 text-base font-medium">{{ clients_connected }}</span>
+                </div>
+                <div class="flex items-baseline gap-2" title="{{ fetched_at_iso }}">
+                    <span class="text-neutral-600 uppercase tracking-wider text-[10px]">last fetch</span>
+                    <span class="text-neutral-300">{{ fetched_at_local }}</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <div class="header-divider"></div>
+
+    {% if is_error %}
+    <div class="mt-5 rounded border border-red-900/60 bg-red-950/30 px-4 py-3 text-sm">
+        <div class="flex items-start gap-3">
+            <span class="mt-1 inline-block h-2 w-2 rounded-full bg-red-400"></span>
+            <div class="flex-1 min-w-0">
+                <p class="text-red-200 font-medium">Cannot reach the OpenVPN management interface</p>
+                <p class="mt-1 text-red-300/80 text-xs break-all">{{ error_message }}</p>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <section class="mt-6 overflow-hidden rounded border border-neutral-800 bg-neutral-950/40">
+        <div class="overflow-x-auto scroll-x">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="text-[10px] uppercase tracking-[0.12em] text-neutral-500">
+                        <th class="text-left font-medium px-4 py-3 border-b border-neutral-800">Common name</th>
+                        <th class="text-left font-medium px-4 py-3 border-b border-neutral-800">Real address</th>
+                        <th class="text-left font-medium px-4 py-3 border-b border-neutral-800">Virtual</th>
+                        <th class="text-right font-medium px-4 py-3 border-b border-neutral-800">RX</th>
+                        <th class="text-right font-medium px-4 py-3 border-b border-neutral-800">TX</th>
+                        <th class="text-right font-medium px-4 py-3 border-b border-neutral-800">Connected</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% if rows %}
+                        {% for row in rows %}
+                        <tr class="border-b border-neutral-900 last:border-b-0">
+                            <td class="px-4 py-2.5 text-neutral-100">{{ row.common_name }}</td>
+                            <td class="px-4 py-2.5 text-neutral-300 tabular" title="{{ row.real_address_full }}">{{ row.real_address_short }}</td>
+                            <td class="px-4 py-2.5 text-neutral-400 tabular">{{ row.virtual_address }}</td>
+                            <td class="px-4 py-2.5 text-right text-neutral-200 tabular">{{ row.bytes_received }}</td>
+                            <td class="px-4 py-2.5 text-right text-neutral-200 tabular">{{ row.bytes_sent }}</td>
+                            <td class="px-4 py-2.5 text-right text-neutral-300 tabular" title="{{ row.connected_absolute }}">{{ row.connected_relative }}</td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="6" class="px-4 py-16 text-center">
+                                <div class="flex flex-col items-center gap-3">
+                                    <span class="pulse-dot is-idle" aria-hidden="true"></span>
+                                    <p class="text-neutral-500 text-sm">No active sessions</p>
+                                    {% if not is_error %}
+                                    <p class="text-neutral-700 text-xs">Waiting for clients to connect</p>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <footer class="mt-8 flex items-center justify-between text-[10px] uppercase tracking-[0.12em] text-neutral-700">
+        <span>ovispect v{{ version }}</span>
+        <span>auto-refresh {{ refresh_seconds }}s</span>
+    </footer>
+
+</div>
+
+</body>
+</html>
