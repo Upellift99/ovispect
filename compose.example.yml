@@ -1,0 +1,33 @@
+# Drop-in example compose file. Copy to compose.yml and edit the env block.
+#
+# Run with:
+#     docker compose up -d
+#
+# Then open http://localhost:8000
+
+services:
+  ovispect:
+    image: ghcr.io/<OWNER>/ovispect:latest
+    container_name: ovispect
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      OPENVPN_HOST: 10.0.0.5
+      OPENVPN_PORT: "5555"
+      # OPENVPN_PASSWORD: changeme
+      SITE_NAME: My VPN
+      REFRESH_SECONDS: "10"
+      TIMEZONE: UTC
+      LOG_LEVEL: INFO
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:8000/healthz"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
