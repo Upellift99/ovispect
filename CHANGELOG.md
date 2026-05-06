@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-05-06
+
+### Fixed
+
+- `__version__` now reads from the installed package metadata via
+  `importlib.metadata`, so the footer on every page (and the
+  `/openapi.json` version field) reflects the real release. Previously it
+  was hardcoded in `__init__.py` and could fall out of sync with
+  `pyproject.toml` (0.2.0 footers were still showing `v0.1.0`).
+- `compose.example.yml` now resolves every value through `${VAR:-default}`
+  or `${VAR:?}`, so settings put in `.env` (including `AUTH_USERNAME`)
+  actually reach the container.
+- All `ghcr.io/Upellift99/...` references switched to lowercase
+  (`ghcr.io/upellift99/...`); the GitHub Container Registry rejects
+  uppercase paths. The release workflow's `IMAGE_NAME` is pinned
+  lowercased so `${{ github.repository }}` capitalization is no longer
+  load-bearing.
+
+### Added
+
+- `.env.example` — canonical reference for all supported env vars.
+
 ## [0.2.0] - 2026-05-06
 
 ### Added
@@ -67,6 +89,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Test suite (41 tests) covering parser, formatting helpers, and HTTP
   routes via FastAPI's `TestClient`.
 
-[Unreleased]: https://github.com/Upellift99/ovispect/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/Upellift99/ovispect/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/Upellift99/ovispect/releases/tag/v0.2.1
 [0.2.0]: https://github.com/Upellift99/ovispect/releases/tag/v0.2.0
 [0.1.0]: https://github.com/Upellift99/ovispect/releases/tag/v0.1.0
