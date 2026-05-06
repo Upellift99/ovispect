@@ -14,11 +14,12 @@ WORKDIR /geoip
 # hadolint ignore=DL3018
 RUN apk add --no-cache curl ca-certificates gzip
 COPY scripts/fetch-geoip.sh ./fetch-geoip.sh
-RUN if [ -z "$SKIP_GEOIP" ]; then \
+RUN set -e; \
+    if [ -z "$SKIP_GEOIP" ]; then \
         sh ./fetch-geoip.sh; \
     else \
-        echo "SKIP_GEOIP set — emitting empty (valid) gzip marker" \
-            && printf '' | gzip > dbip-country-lite.csv.gz; \
+        echo "SKIP_GEOIP set — emitting empty (valid) gzip marker"; \
+        gzip -c < /dev/null > dbip-country-lite.csv.gz; \
     fi
 
 

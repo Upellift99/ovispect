@@ -120,8 +120,7 @@ def _build_snapshot_payload(settings: Settings, snapshot: StatusSnapshot) -> dic
         "total_bytes_received_human": humanize_bytes(snapshot.total_bytes_received),
         "total_bytes_sent_human": humanize_bytes(snapshot.total_bytes_sent),
         "clients": [
-            _format_client_row(c, now=now, country_lookup=country_lookup)
-            for c in snapshot.clients
+            _format_client_row(c, now=now, country_lookup=country_lookup) for c in snapshot.clients
         ],
     }
 
