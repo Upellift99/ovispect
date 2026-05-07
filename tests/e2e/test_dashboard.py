@@ -11,7 +11,7 @@ import pytest
 # collection time.
 pytest.importorskip("playwright.sync_api")
 
-from playwright.sync_api import Page, expect  # noqa: E402
+from playwright.sync_api import Page, expect
 
 
 def test_dashboard_serves_local_assets_only(live_server: str, page: Page) -> None:
