@@ -55,7 +55,6 @@ coverage.xml
 Thumbs.db
 
 # Project-specific
-docs/screenshot.png
 !docs/.gitkeep
 
 # Local agent / tooling artefacts
