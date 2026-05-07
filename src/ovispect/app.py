@@ -19,6 +19,7 @@ from fastapi.responses import (
     RedirectResponse,
     Response,
 )
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -51,6 +52,7 @@ from ovispect.webhooks import WebhookNotifier
 logger = logging.getLogger(__name__)
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
+_STATIC_DIR = Path(__file__).parent / "static"
 templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
 
 
@@ -231,6 +233,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         openapi_url=None,
         lifespan=_make_lifespan(cfg),
     )
+
+    application.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 
     if auth_enabled:
         logger.info("Authentication enabled (single-user, bcrypt-hashed password)")

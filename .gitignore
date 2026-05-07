@@ -61,3 +61,6 @@ docs/screenshot.png
 # Local agent / tooling artefacts
 .claude/
 .qodo/
+
+# Build cache (Tailwind CLI binary, etc.)
+.cache/

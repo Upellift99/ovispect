@@ -47,3 +47,17 @@ repos:
       - id: detect-secrets
         args: ["--baseline", ".secrets.baseline"]
         exclude: ^tests/fixtures/
+
+  - repo: local
+    hooks:
+      - id: build-css
+        name: rebuild Tailwind CSS
+        # Triggered when any Tailwind source changes. The script downloads the
+        # standalone Tailwind CLI on first run (~30 MB, cached under .cache/),
+        # then recompiles src/ovispect/static/app.css. If the regenerated file
+        # differs from what was staged, pre-commit aborts and lists app.css as
+        # modified — `git add` it and re-commit.
+        entry: scripts/build-css.sh
+        language: script
+        pass_filenames: false
+        files: ^(src/ovispect/templates/.*\.html|src/ovispect/static/app\.src\.css|tailwind\.config\.js)$

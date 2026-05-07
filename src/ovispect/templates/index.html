@@ -7,33 +7,17 @@
     <meta name="robots" content="noindex, nofollow">
     <title>{{ site_name }} — ovispect</title>
 
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=IBM+Plex+Sans:wght@500;600&display=swap" rel="stylesheet">
-
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    fontFamily: {
-                        mono: ['"IBM Plex Mono"', 'ui-monospace', 'SFMono-Regular', 'monospace'],
-                        sans: ['"IBM Plex Sans"', 'system-ui', 'sans-serif'],
-                    },
-                    colors: {
-                        surface: '#141414',
-                        base: '#0a0a0a',
-                    },
-                },
-            },
-            corePlugins: {
-                preflight: true,
-            },
-        };
-    </script>
+    <link rel="stylesheet" href="/static/app.css">
 
     <style>
         html, body { background-color: #0a0a0a; }
+        /* Font-size selector: S/M/L. The root font-size scales every rem-based Tailwind
+           size (text-sm = 0.875rem, etc.). Hard-pixel utilities like text-[10px] stay
+           compact on purpose — the uppercase labels look better small. */
+        html { font-size: 16px; }
+        html[data-font-size="s"] { font-size: 14px; }
+        html[data-font-size="l"] { font-size: 18px; }
+
         body {
             color: #e5e5e5;
             font-family: '"IBM Plex Mono"', ui-monospace, monospace;
@@ -42,6 +26,31 @@
             -moz-osx-font-smoothing: grayscale;
         }
         .tabular { font-variant-numeric: tabular-nums; }
+
+        .fs-group {
+            display: inline-flex;
+            border: 1px solid #262626;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .fs-btn {
+            background: transparent;
+            border: 0;
+            color: #a3a3a3;
+            font-family: inherit;
+            font-size: 10px;
+            line-height: 1;
+            padding: 4px 7px;
+            letter-spacing: 0.1em;
+            cursor: pointer;
+            transition: color 120ms ease, background-color 120ms ease;
+        }
+        .fs-btn + .fs-btn { border-left: 1px solid #262626; }
+        .fs-btn:hover { color: #f5f5f5; }
+        .fs-btn[aria-pressed="true"] {
+            color: #f5f5f5;
+            background-color: rgba(64, 64, 64, 0.7);
+        }
 
         .header-divider {
             height: 1px;
@@ -79,8 +88,8 @@
         }
 
         tbody tr { transition: background-color 120ms ease-in-out; cursor: pointer; }
-        tbody tr:nth-child(even) { background-color: rgba(23, 23, 23, 0.35); }
-        tbody tr:hover { background-color: rgba(38, 38, 38, 0.7); }
+        tbody tr:nth-child(even) { background-color: rgba(38, 38, 38, 0.55); }
+        tbody tr:hover { background-color: rgba(64, 64, 64, 0.7); }
         tbody tr.row-empty { cursor: default; }
         tbody tr.row-empty:hover { background-color: transparent; }
 
@@ -231,15 +240,15 @@
             font-size: 10px;
             text-transform: uppercase;
             letter-spacing: 0.12em;
-            color: #525252;
+            color: #a3a3a3;
         }
         .drawer-fields dd {
             margin: 0;
-            color: #d4d4d4;
+            color: #f5f5f5;
             font-variant-numeric: tabular-nums;
             word-break: break-all;
         }
-        .drawer-fields dd.empty { color: #525252; font-style: italic; }
+        .drawer-fields dd.empty { color: #737373; font-style: italic; }
     </style>
 </head>
 <body class="min-h-screen font-mono antialiased">
@@ -253,23 +262,28 @@
                 <h1 class="font-sans text-lg font-semibold tracking-tight text-neutral-100">
                     {{ site_name }}
                 </h1>
-                <span class="text-neutral-600 text-xs tracking-wide uppercase">/ ovispect</span>
+                <span class="text-neutral-400 text-xs tracking-wide uppercase">/ ovispect</span>
             </div>
 
-            <div class="flex items-center gap-6 text-xs text-neutral-400 tabular">
+            <div class="flex items-center gap-6 text-xs text-neutral-300 tabular">
                 <div class="flex items-baseline gap-2">
-                    <span class="text-neutral-600 uppercase tracking-wider text-[10px]">connected</span>
+                    <span class="text-neutral-400 uppercase tracking-wider text-[10px]">connected</span>
                     <span id="connected-count" class="text-neutral-100 text-base font-medium">{{ clients_connected }}</span>
                 </div>
                 <div class="flex items-baseline gap-2" title="{{ fetched_at_iso }}">
-                    <span class="text-neutral-600 uppercase tracking-wider text-[10px]">last fetch</span>
-                    <span id="last-fetch" class="text-neutral-300">{{ fetched_at_local }}</span>
+                    <span class="text-neutral-400 uppercase tracking-wider text-[10px]">last fetch</span>
+                    <span id="last-fetch" class="text-neutral-100">{{ fetched_at_local }}</span>
+                </div>
+                <div class="fs-group" role="group" aria-label="Font size">
+                    <button type="button" class="fs-btn" data-fontsize="s" aria-pressed="false" title="Small">S</button>
+                    <button type="button" class="fs-btn" data-fontsize="m" aria-pressed="true" title="Medium">M</button>
+                    <button type="button" class="fs-btn" data-fontsize="l" aria-pressed="false" title="Large">L</button>
                 </div>
                 {% if show_logout %}
                 <form method="post" action="/logout" class="flex">
                     <button
                         type="submit"
-                        class="text-[10px] uppercase tracking-[0.14em] text-neutral-500 hover:text-neutral-300 transition-colors"
+                        class="text-[10px] uppercase tracking-[0.14em] text-neutral-400 hover:text-neutral-100 transition-colors"
                     >Sign out</button>
                 </form>
                 {% endif %}
@@ -308,14 +322,14 @@
                 tabindex="-1"
             >&times;</button>
         </div>
-        <span id="filter-stats" class="text-[10px] uppercase tracking-[0.12em] text-neutral-600 tabular"></span>
+        <span id="filter-stats" class="text-[10px] uppercase tracking-[0.12em] text-neutral-400 tabular"></span>
     </div>
 
     <section class="mt-3 overflow-hidden rounded border border-neutral-800 bg-neutral-950/40">
         <div class="overflow-x-auto scroll-x">
             <table class="w-full text-sm">
                 <thead>
-                    <tr class="text-[10px] uppercase tracking-[0.12em] text-neutral-500">
+                    <tr class="text-[10px] uppercase tracking-[0.12em] text-neutral-300">
                         <th class="text-left font-medium px-4 py-3 border-b border-neutral-800" data-sort-key="common_name" data-sort-type="text">Common name<span class="sort-arrow"></span></th>
                         <th class="text-left font-medium px-4 py-3 border-b border-neutral-800" data-sort-key="real_address_short" data-sort-type="text">Real address<span class="sort-arrow"></span></th>
                         <th class="text-left font-medium px-4 py-3 border-b border-neutral-800" data-sort-key="virtual_address" data-sort-type="text">Virtual<span class="sort-arrow"></span></th>
@@ -351,11 +365,11 @@
                     {% endif %}
                 </tbody>
                 <tfoot id="totals-tfoot" class="{% if not rows %}hidden{% endif %}">
-                    <tr class="text-[10px] uppercase tracking-[0.12em] text-neutral-500 border-t border-neutral-800 bg-neutral-950/60">
+                    <tr class="text-[10px] uppercase tracking-[0.12em] text-neutral-300 border-t border-neutral-700 bg-neutral-800/60">
                         <td class="px-4 py-2.5 font-medium" colspan="3">Total</td>
-                        <td id="total-rx" class="px-4 py-2.5 text-right text-neutral-300 tabular">{{ total_bytes_received_human }}</td>
-                        <td id="total-tx" class="px-4 py-2.5 text-right text-neutral-300 tabular">{{ total_bytes_sent_human }}</td>
-                        <td id="total-count" class="px-4 py-2.5 text-right text-neutral-300 tabular">{{ clients_connected }}</td>
+                        <td id="total-rx" class="px-4 py-2.5 text-right text-neutral-100 tabular">{{ total_bytes_received_human }}</td>
+                        <td id="total-tx" class="px-4 py-2.5 text-right text-neutral-100 tabular">{{ total_bytes_sent_human }}</td>
+                        <td id="total-count" class="px-4 py-2.5 text-right text-neutral-100 tabular">{{ clients_connected }}</td>
                     </tr>
                 </tfoot>
             </table>
@@ -400,7 +414,9 @@
         sortKey: 'common_name',
         sortDir: 'asc',
         filter: '',
+        fontSize: 'm',
     };
+    const FONT_SIZES = ['s', 'm', 'l'];
     let firstSnapshotApplied = false;
     let drawerKey = null;
 
@@ -436,6 +452,7 @@
                 STATE.filter = saved.filter;
                 searchInput.value = saved.filter;
             }
+            if (FONT_SIZES.includes(saved.fontSize)) STATE.fontSize = saved.fontSize;
         } catch (_) { /* corrupted entry, ignore */ }
     }
     function savePreferences() {
@@ -444,8 +461,15 @@
                 sortKey: STATE.sortKey,
                 sortDir: STATE.sortDir,
                 filter: STATE.filter,
+                fontSize: STATE.fontSize,
             }));
         } catch (_) { /* quota / private mode, fine */ }
+    }
+    function applyFontSize() {
+        document.documentElement.dataset.fontSize = STATE.fontSize;
+        for (const btn of document.querySelectorAll('.fs-btn')) {
+            btn.setAttribute('aria-pressed', btn.dataset.fontsize === STATE.fontSize ? 'true' : 'false');
+        }
     }
 
     // --- Identity / diff --------------------------------------------------
@@ -782,8 +806,19 @@
         render();
     });
 
+    for (const btn of document.querySelectorAll('.fs-btn')) {
+        btn.addEventListener('click', () => {
+            const next = btn.dataset.fontsize;
+            if (!FONT_SIZES.includes(next) || next === STATE.fontSize) return;
+            STATE.fontSize = next;
+            savePreferences();
+            applyFontSize();
+        });
+    }
+
     // --- Boot -------------------------------------------------------------
     loadPreferences();
+    applyFontSize();
     syncClearVisibility();
     renderSortIndicators();
     fetchSnapshot();

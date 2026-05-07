@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ovispect"
-version = "0.6.0"
+version = "0.7.0"
 description = "A lightweight, modern dashboard for OpenVPN's management interface."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -46,6 +46,9 @@ dev = [
     "mypy>=1.10",
     "pre-commit>=3.7",
     "types-requests",
+]
+e2e = [
+    "pytest-playwright>=0.5",
 ]
 
 [project.scripts]
@@ -122,11 +125,16 @@ files = ["src/ovispect"]
 
 [tool.pytest.ini_options]
 minversion = "8.0"
-addopts = "-ra --strict-markers --strict-config"
+# `not e2e` excludes the Playwright suite by default — opt-in via `-m e2e` or
+# by passing `tests/e2e` explicitly. See tests/e2e/README for setup.
+addopts = "-ra --strict-markers --strict-config -m 'not e2e'"
 testpaths = ["tests"]
 pythonpath = ["src"]
 filterwarnings = ["error"]
 asyncio_mode = "auto"
+markers = [
+    "e2e: end-to-end Playwright tests (requires `pip install -e .[e2e]` and `playwright install chromium`)",
+]
 
 [tool.coverage.run]
 branch = true

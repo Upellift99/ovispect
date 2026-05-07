@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-05-07
+
+### Added
+
+- **Self-hosted assets** — IBM Plex Mono/Sans `.woff2` files and a
+  precompiled Tailwind stylesheet now ship under
+  `src/ovispect/static/`. The dashboard no longer reaches out to
+  `fonts.googleapis.com` or `cdn.tailwindcss.com`; everything is served
+  from the FastAPI app itself.
+- `scripts/build-css.sh` — recompiles `app.css` via the Tailwind
+  standalone CLI (Go binary, no Node required). Downloads the pinned
+  v3.4.17 release on first run into `.cache/` (gitignored).
+- **S/M/L font-size selector** in the header. The choice is persisted
+  alongside the existing UI preferences in `localStorage` and scales
+  every rem-based size via a CSS variable on `<html>`.
+- **End-to-end Playwright suite** under `tests/e2e/`, opt-in via
+  `pytest -m e2e`. Boots a real uvicorn instance in a background
+  thread and asserts (a) no third-party origins are hit and (b) the
+  S/M/L selector flips `html[data-font-size]` and survives a reload.
+  New optional extra: `pip install -e .[e2e]`.
+- Pre-commit hook that re-runs `scripts/build-css.sh` whenever a
+  template, the Tailwind config, or `app.src.css` changes — keeps the
+  committed `app.css` in lock-step with its sources.
+
+### Changed
+
+- Dashboard contrast is bumped for dark-mode legibility: zebra rows
+  go from ~12 % to ~22 % opacity, uppercase labels lift from
+  `neutral-500/600` to `neutral-300/400`, and the totals row now has a
+  visible background plus white-on-grey values.
+
 ## [0.6.0] - 2026-05-06
 
 ### Added
