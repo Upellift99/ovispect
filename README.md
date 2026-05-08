@@ -26,12 +26,12 @@ monitoring suite.
 
 ## Why ovispect?
 
-| Project                          | Image  | Maintained | UI            | GeoIP | Auth |
-|----------------------------------|--------|------------|---------------|-------|------|
-| `ruimarinho/openvpn-monitor`     | 927 MB | no         | dated         | yes   | no   |
-| `samuelkadolph/openvpn-monitor`  | 58 MB  | yes        | same as above | yes   | no   |
-| `kumina/openvpn_exporter` (Prom) | ~15 MB | yes        | none          | no    | no   |
-| **ovispect** (this project)      | ≤75 MB | yes        | modern        | yes   | yes  |
+| Project                          | Image  | Maintained | UI            | GeoIP | Auth          |
+|----------------------------------|--------|------------|---------------|-------|---------------|
+| `ruimarinho/openvpn-monitor`     | 927 MB | no         | dated         | yes   | no            |
+| `samuelkadolph/openvpn-monitor`  | 58 MB  | yes        | same as above | yes   | no            |
+| `kumina/openvpn_exporter` (Prom) | ~15 MB | yes        | none          | no    | no            |
+| **ovispect** (this project)      | ≤80 MB | yes        | modern        | yes   | yes (+OIDC)   |
 
 ovispect targets the *"I bookmarked this, I want a quick clean look"* use
 case. For long-term monitoring, alerting, and historical graphs, pair it with
@@ -95,9 +95,76 @@ Then set `OPENVPN_PASSWORD` in ovispect to the same value.
 
 ## Authentication
 
-ovispect supports two deployment modes; pick whichever fits your stack.
+ovispect supports three deployment modes. Resolution at startup is strict:
+**OIDC > built-in > upstream.** The active mode is logged at boot.
 
-### Mode 1 — Built-in authentication (standalone)
+### Mode 1 — Native OIDC (recommended for self-hosted IdPs)
+
+If you already run an OIDC provider (Keycloak, Authelia, Authentik,
+Zitadel, etc.), ovispect can authenticate users directly against it
+without requiring oauth2-proxy or a ForwardAuth middleware in front.
+
+Set the env vars:
+
+```env
+OIDC_ISSUER_URL=https://sso.example.com/realms/internal
+OIDC_CLIENT_ID=ovispect
+OIDC_CLIENT_SECRET=...
+SESSION_SECRET=$(openssl rand -hex 32)
+```
+
+Optionally restrict access to specific groups (member of *any one*
+required group is enough):
+
+```env
+OIDC_REQUIRED_GROUPS=admins,vpn-monitors
+```
+
+Configure your IdP with the redirect URI:
+`https://<your-host>/oidc/callback`. ovispect implements Authorization
+Code Flow with PKCE (S256) and validates `iss`, `aud`, `exp` and `iat` on
+every id_token. Tokens never leave the server — they are stored in a
+signed Starlette session cookie. The "Sign out" button triggers a
+provider-side logout via `end_session_endpoint`.
+
+A drop-in `compose.oidc.example.yml` is provided in this repo.
+
+#### OIDC provider examples
+
+**Keycloak** — Realm settings → *Clients* → *Create*:
+- Client ID: `ovispect`
+- Client authentication: *On* (confidential)
+- Standard flow: *On*
+- Valid redirect URIs: `https://<your-host>/oidc/callback`
+- Valid post logout redirect URIs: `https://<your-host>/`
+- Copy the client secret from the *Credentials* tab into
+  `OIDC_CLIENT_SECRET`. To use `OIDC_REQUIRED_GROUPS`, add a *Group
+  Membership* mapper to the client scope and set "Token Claim Name" to
+  `groups` (and tick *Add to ID token*).
+
+**Authelia** — In `configuration.yml`:
+```yaml
+identity_providers:
+  oidc:
+    clients:
+      - id: ovispect
+        secret: '<bcrypt or pbkdf2 hash of the client secret>'
+        redirect_uris:
+          - https://<your-host>/oidc/callback
+        scopes: [openid, profile, email, groups]
+        userinfo_signed_response_alg: none
+```
+Set ovispect's `OIDC_ISSUER_URL` to your Authelia base URL (no trailing
+slash).
+
+**Authentik** — *Applications* → *Providers* → *Create OAuth2/OIDC*:
+- Client type: *Confidential*
+- Redirect URIs: `https://<your-host>/oidc/callback`
+- Signing key: pick the realm's RSA key
+- Scopes: `openid`, `profile`, `email` (and `groups` if used)
+- The `OIDC_ISSUER_URL` is `https://<authentik>/application/o/<slug>/`
+
+### Mode 2 — Built-in single-user authentication (standalone)
 
 Generate a bcrypt hash:
 
@@ -136,30 +203,44 @@ or fail2ban in front.
 > testing. For production, terminate TLS with Caddy, Traefik (Let's
 > Encrypt), or any other reverse proxy.
 
-### Mode 2 — Reverse proxy (multi-user, SSO, etc.)
+### Mode 3 — Reverse proxy (trust upstream)
 
-Leave `AUTH_PASSWORD_HASH` empty or unset. ovispect will not enforce any
-authentication and the request reaching it is trusted. Common front-ends:
+Leave both `OIDC_ISSUER_URL` and `AUTH_PASSWORD_HASH` empty or unset.
+ovispect will not enforce any authentication and the request reaching it
+is trusted. Common front-ends:
 
 - nginx + basic auth
-- oauth2-proxy + your favorite IdP (Keycloak, Authelia, etc.)
+- oauth2-proxy + your favourite IdP
 - Caddy with `basicauth` or `forward_auth`
 - Traefik forward-auth middleware
 - BunkerWeb with auth plugins
 
-Whichever you pick, never expose ovispect (or the OpenVPN management
-interface) directly to the public internet.
+If the upstream injects `X-Auth-Request-User` or
+`X-Auth-Request-Preferred-Username` (oauth2-proxy convention), ovispect
+will display the user in the dashboard header. Whichever proxy you pick,
+never expose ovispect (or the OpenVPN management interface) directly to
+the public internet.
 
 ### Auth-related environment variables
 
-| Variable                   | Default              | Notes                                                        |
-|----------------------------|----------------------|--------------------------------------------------------------|
-| `AUTH_USERNAME`            | `admin`              | Username expected at sign-in                                 |
-| `AUTH_PASSWORD_HASH`       | (empty)              | Bcrypt hash. **Empty disables built-in auth.**               |
-| `SESSION_SECRET`           | (empty)              | ≥ 32 chars. Required iff `AUTH_PASSWORD_HASH` is set.        |
-| `SESSION_LIFETIME_SECONDS` | `86400`              | Session cookie max-age (60 to 30 days)                       |
-| `SESSION_COOKIE_NAME`      | `ovispect_session`   | Cookie name                                                  |
-| `SESSION_COOKIE_SECURE`    | `true`               | `Secure` flag. Disable only for local plaintext testing.     |
+| Variable                     | Default                | Notes                                                                                  |
+|------------------------------|------------------------|----------------------------------------------------------------------------------------|
+| `OIDC_ISSUER_URL`            | (empty)                | Setting this enables Mode 1 (native OIDC).                                             |
+| `OIDC_CLIENT_ID`             | (empty)                | Required when `OIDC_ISSUER_URL` is set.                                                |
+| `OIDC_CLIENT_SECRET`         | (empty)                | Required when `OIDC_ISSUER_URL` is set.                                                |
+| `OIDC_REDIRECT_URI`          | (auto-derived)         | Override only if your reverse proxy rewrites the Host header.                          |
+| `OIDC_SCOPES`                | `openid profile email` | Space-separated list passed to the authorize endpoint.                                 |
+| `OIDC_USERNAME_CLAIM`        | `preferred_username`   | Claim used as the displayed username; falls back to `email` then `sub`.                |
+| `OIDC_REQUIRED_GROUPS`       | (empty)                | Comma-separated. Empty = no group check. Membership in any one is sufficient.          |
+| `OIDC_GROUPS_CLAIM`          | `groups`               | Claim that carries the user's groups.                                                  |
+| `OIDC_VERIFY_SSL`            | `true`                 | Disable only when calling a private IdP with self-signed certs (not recommended).      |
+| `OIDC_LOGOUT_REDIRECT_URI`   | (empty)                | Where to send the user after a provider-side logout. Empty = `/`.                      |
+| `AUTH_USERNAME`              | `admin`                | Username expected at sign-in (Mode 2).                                                 |
+| `AUTH_PASSWORD_HASH`         | (empty)                | Bcrypt hash. Setting this enables Mode 2 (ignored if OIDC mode is active).             |
+| `SESSION_SECRET`             | (empty)                | ≥ 32 chars. Required when either OIDC or built-in mode is active.                      |
+| `SESSION_LIFETIME_SECONDS`   | `86400`                | Session cookie max-age (60 to 30 days).                                                |
+| `SESSION_COOKIE_NAME`        | `ovispect_session`     | Cookie name.                                                                           |
+| `SESSION_COOKIE_SECURE`      | `true`                 | `Secure` flag. Disable only for local plaintext testing.                               |
 
 ## Migration from `openvpn-monitor`
 

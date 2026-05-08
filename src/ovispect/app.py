@@ -5,13 +5,14 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import secrets
 from collections.abc import AsyncIterator, Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from fastapi import Depends, FastAPI, Form, Request
+from fastapi import Depends, FastAPI, Form, HTTPException, Request
 from fastapi.responses import (
     HTMLResponse,
     JSONResponse,
@@ -24,6 +25,7 @@ from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
 from ovispect import __version__
+from ovispect import oidc as oidc_module
 from ovispect.auth import (
     LoginRateLimiter,
     build_login_redirect,
@@ -46,6 +48,14 @@ from ovispect.formatting import (
     strip_port,
 )
 from ovispect.geo import country_flag, extract_ip, get_database
+from ovispect.oidc import (
+    OIDCClient,
+    OIDCError,
+    init_oidc_client,
+    require_oidc_auth_factory,
+    session_groups,
+    session_username,
+)
 from ovispect.ovpn import Client, StatusSnapshot, fetch_status
 from ovispect.webhooks import WebhookNotifier
 
@@ -136,6 +146,7 @@ def _build_view_model(
     snapshot: StatusSnapshot,
     *,
     auth_enabled: bool,
+    username: str | None = None,
 ) -> dict[str, Any]:
     payload = _build_snapshot_payload(settings, snapshot)
     return {
@@ -152,8 +163,28 @@ def _build_view_model(
         "total_bytes_received_human": payload["total_bytes_received_human"],
         "total_bytes_sent_human": payload["total_bytes_sent_human"],
         "show_logout": auth_enabled,
+        "username": username,
         "geoip_attribution": get_database(settings.geoip_database_path) is not None,
     }
+
+
+def _upstream_username(request: Request) -> str | None:
+    """Extract a user identifier from common reverse-proxy auth headers.
+
+    Supports oauth2-proxy's ``X-Auth-Request-User`` /
+    ``X-Auth-Request-Preferred-Username`` and a few neighbours. Best-effort
+    only; ovispect does not enforce anything in upstream-trust mode.
+    """
+    for header in (
+        "x-auth-request-preferred-username",
+        "x-auth-request-user",
+        "remote-user",
+        "x-forwarded-user",
+    ):
+        value = request.headers.get(header)
+        if value:
+            return value.strip() or None
+    return None
 
 
 async def _webhook_poll_loop(cfg: Settings, notifier: WebhookNotifier) -> None:
@@ -215,14 +246,32 @@ def _make_lifespan(cfg: Settings) -> Callable[[FastAPI], Any]:
     return lifespan
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(settings: Settings | None = None) -> FastAPI:  # noqa: PLR0915
     """Application factory.
 
     Tests can pass a custom :class:`Settings` instance to avoid touching
     environment variables. Production code calls :func:`get_settings`.
     """
     cfg = settings if settings is not None else get_settings()
-    auth_enabled = is_auth_enabled(cfg)
+    mode = cfg.auth_mode
+    auth_enabled = mode != "upstream"
+
+    if mode == "oidc" and is_auth_enabled(cfg):
+        logger.warning(
+            "Both OIDC_ISSUER_URL and AUTH_PASSWORD_HASH are configured —"
+            " AUTH_PASSWORD_HASH is ignored in OIDC mode."
+        )
+
+    oidc_client: OIDCClient | None = None
+    if mode == "oidc":
+        oidc_client = init_oidc_client(cfg)
+        if oidc_client is None:  # pragma: no cover - guarded by config validation
+            raise RuntimeError("OIDC mode requested but client initialisation returned None")
+        logger.info("Authentication mode: OIDC (issuer: %s)", oidc_client.discovery.issuer)
+    elif mode == "builtin":
+        logger.info("Authentication mode: built-in (single user: %s)", cfg.auth_username)
+    else:
+        logger.info("Authentication mode: trust upstream (no built-in authentication)")
 
     application = FastAPI(
         title="ovispect",
@@ -237,26 +286,33 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 
     if auth_enabled:
-        logger.info("Authentication enabled (single-user, bcrypt-hashed password)")
         application.add_middleware(
             SessionMiddleware,
             secret_key=cfg.session_secret.get_secret_value(),
             session_cookie=cfg.session_cookie_name,
             max_age=cfg.session_lifetime_seconds,
-            same_site="strict",
+            same_site="lax" if mode == "oidc" else "strict",
             https_only=cfg.session_cookie_secure,
         )
-    else:
-        logger.info(
-            "Authentication disabled — relying on upstream reverse proxy for access control"
-        )
 
-    require_auth = require_auth_factory(cfg)
+    require_auth: Any
+    if mode == "oidc":
+        assert oidc_client is not None
+        require_auth = require_oidc_auth_factory(cfg, oidc_client)
+    else:
+        require_auth = require_auth_factory(cfg)
     rate_limiter = LoginRateLimiter()
 
     @application.get("/healthz", response_class=JSONResponse)
     async def healthz() -> dict[str, bool]:
         return {"ok": True}
+
+    def _resolve_username(request: Request) -> str | None:
+        if mode == "oidc":
+            return session_username(cfg, oidc_module.get_session(request))
+        if mode == "builtin":
+            return cfg.auth_username
+        return _upstream_username(request)
 
     @application.get("/", response_class=HTMLResponse, dependencies=[Depends(require_auth)])
     async def index(request: Request) -> Response:
@@ -266,7 +322,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             password=cfg.openvpn_password.get_secret_value(),
             timeout=cfg.management_timeout_seconds,
         )
-        context = _build_view_model(cfg, snapshot, auth_enabled=auth_enabled)
+        context = _build_view_model(
+            cfg,
+            snapshot,
+            auth_enabled=auth_enabled,
+            username=_resolve_username(request),
+        )
         return templates.TemplateResponse(request, "index.html", context)
 
     @application.get(
@@ -294,7 +355,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         body = _render_prometheus(snapshot)
         return PlainTextResponse(body, media_type="text/plain; version=0.0.4")
 
-    if not auth_enabled:
+    if mode == "oidc":
+        assert oidc_client is not None
+        _wire_oidc_routes(application, cfg, oidc_client)
+        return application
+
+    if mode == "upstream":
         return application
 
     @application.get("/login", response_class=HTMLResponse)
@@ -366,6 +432,108 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return RedirectResponse(url=build_login_redirect(None), status_code=303)
 
     return application
+
+
+def _wire_oidc_routes(
+    application: FastAPI,
+    cfg: Settings,
+    client: OIDCClient,
+) -> None:
+    """Attach /login, /oidc/callback and /logout for OIDC mode."""
+
+    @application.get("/login")
+    async def login(request: Request, next: str | None = None) -> Response:
+        if oidc_module.get_session(request) is not None:
+            return RedirectResponse(url="/", status_code=303)
+        try:
+            url = client.authorize_redirect(request, next_path=next)
+        except (AssertionError, AttributeError):
+            # Session middleware not installed — should never happen in OIDC mode.
+            raise HTTPException(status_code=500, detail="session_unavailable")  # noqa: B904
+        return RedirectResponse(url=url, status_code=303)
+
+    @application.get("/oidc/callback")
+    async def callback(
+        request: Request,
+        code: str | None = None,
+        state: str | None = None,
+        error: str | None = None,
+        error_description: str | None = None,
+    ) -> Response:
+        if error or not code or not state:
+            return _render_login_error(
+                request, cfg, reason=error or "missing_parameters", description=error_description
+            )
+        try:
+            result = await client.handle_callback(request, code=code, state=state)
+        except OIDCError as exc:
+            logger.warning("oidc callback failed: %s", exc.code)
+            return _render_login_error(request, cfg, reason=exc.code)
+
+        groups = session_groups(cfg, oidc_module.get_session(request))
+        if cfg.oidc_required_groups_set and not any(
+            g in cfg.oidc_required_groups_set for g in groups
+        ):
+            oidc_module.clear_session(request)
+            return _render_forbidden(request, cfg, status_code=403)
+
+        target = result["next"] or "/"
+        return RedirectResponse(url=target, status_code=303)
+
+    @application.post("/logout")
+    async def logout(request: Request) -> Response:
+        end_session = client.logout_url(
+            request,
+            post_logout_redirect_uri=(
+                str(cfg.oidc_logout_redirect_uri) if cfg.oidc_logout_redirect_uri else None
+            ),
+        )
+        oidc_module.clear_session(request)
+        if end_session is not None:
+            return RedirectResponse(url=end_session, status_code=303)
+        target = (
+            str(cfg.oidc_logout_redirect_uri) if cfg.oidc_logout_redirect_uri is not None else "/"
+        )
+        return RedirectResponse(url=target, status_code=303)
+
+
+def _render_login_error(
+    request: Request,
+    cfg: Settings,
+    *,
+    reason: str,
+    description: str | None = None,
+) -> Response:
+    request_id = secrets.token_hex(4)
+    logger.info("oidc login error rendered (reason=%s, request_id=%s)", reason, request_id)
+    return templates.TemplateResponse(
+        request,
+        "login_error.html",
+        {
+            "site_name": cfg.site_name,
+            "version": __version__,
+            "request_id": request_id,
+        },
+        status_code=400,
+    )
+
+
+def _render_forbidden(
+    request: Request,
+    cfg: Settings,
+    *,
+    status_code: int = 403,
+) -> Response:
+    return templates.TemplateResponse(
+        request,
+        "forbidden.html",
+        {
+            "site_name": cfg.site_name,
+            "version": __version__,
+            "required_groups": sorted(cfg.oidc_required_groups_set),
+        },
+        status_code=status_code,
+    )
 
 
 def _render_prometheus(snapshot: StatusSnapshot) -> str:

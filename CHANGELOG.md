@@ -7,6 +7,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-05-08
+
+### Added
+
+- **Native OIDC authentication (Mode 1)** — ovispect can now authenticate
+  users directly against an OpenID Connect provider (Keycloak, Authelia,
+  Authentik, Zitadel, …) without an oauth2-proxy / ForwardAuth layer in
+  front. Implementation uses Authorization Code Flow with PKCE (S256) and
+  validates `iss`, `aud`, `exp` and `iat` on every id_token.
+- Auto-discovery of provider configuration via
+  `.well-known/openid-configuration`; ovispect refuses to start when
+  discovery fails rather than silently falling back.
+- Group-based access control via `OIDC_REQUIRED_GROUPS`. A user lacking
+  the required group lands on a polite 403 page that lists what's
+  expected (handy for admins debugging access).
+- SSO logout — the *Sign out* button hits the provider's
+  `end_session_endpoint` with `id_token_hint`, then clears the local
+  session.
+- Username display in the dashboard header. The claim is configurable via
+  `OIDC_USERNAME_CLAIM` (defaults to `preferred_username`, with `email`
+  and `sub` as fallbacks).
+- Display of the upstream user when running behind oauth2-proxy or a
+  similar header-injecting proxy (`X-Auth-Request-User` /
+  `X-Auth-Request-Preferred-Username`).
+- New env vars: `OIDC_ISSUER_URL`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`,
+  `OIDC_REDIRECT_URI`, `OIDC_SCOPES`, `OIDC_USERNAME_CLAIM`,
+  `OIDC_REQUIRED_GROUPS`, `OIDC_GROUPS_CLAIM`, `OIDC_VERIFY_SSL`,
+  `OIDC_LOGOUT_REDIRECT_URI`.
+- New deployment example: `compose.oidc.example.yml`.
+
+### Changed
+
+- The README's *Authentication* section is rewritten around the three
+  modes and includes provider-specific setup snippets for Keycloak,
+  Authelia, and Authentik.
+- The `require_auth` FastAPI dependency now routes to either the OIDC or
+  built-in implementation based on the resolved mode (OIDC > built-in >
+  upstream). When both `OIDC_ISSUER_URL` and `AUTH_PASSWORD_HASH` are
+  set, OIDC wins and the latter is ignored with a warning at boot.
+
+### Security
+
+- Native OIDC implementation enforces PKCE (S256) for the authorize
+  request and validates `state`, `iss`, `aud`, `exp`, `iat` on every
+  id_token (signature via JWKS, RS256/RS384/RS512/ES256/ES384/PS256).
+- Refresh tokens are stored exclusively server-side (signed Starlette
+  session cookie); the browser never sees them. Expired access is
+  silently refreshed once on demand and the session is cleared if the
+  provider rejects the refresh.
+
+### Documentation
+
+- Added provider-specific setup examples for Keycloak, Authelia, and
+  Authentik in the README.
+- `.env.example` reorganised around the three authentication modes.
+
 ## [0.7.0] - 2026-05-07
 
 ### Added
@@ -260,7 +316,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Test suite (41 tests) covering parser, formatting helpers, and HTTP
   routes via FastAPI's `TestClient`.
 
-[Unreleased]: https://github.com/Upellift99/ovispect/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/Upellift99/ovispect/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/Upellift99/ovispect/releases/tag/v0.8.0
+[0.7.0]: https://github.com/Upellift99/ovispect/releases/tag/v0.7.0
 [0.6.0]: https://github.com/Upellift99/ovispect/releases/tag/v0.6.0
 [0.5.0]: https://github.com/Upellift99/ovispect/releases/tag/v0.5.0
 [0.4.0]: https://github.com/Upellift99/ovispect/releases/tag/v0.4.0

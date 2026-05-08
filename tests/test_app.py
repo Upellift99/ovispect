@@ -344,3 +344,40 @@ def test_login_rate_limit_blocks_after_repeated_failures(client_with_auth) -> No
     response = client_with_auth.post("/login", data=bad_creds)
     assert response.status_code == 429
     assert "Too many failed attempts" in response.text
+
+
+def test_builtin_mode_renders_username_in_header(client_with_auth) -> None:  # type: ignore[no-untyped-def]
+    """Built-in mode shows the configured AUTH_USERNAME after sign-in."""
+    client_with_auth.post(
+        "/login",
+        data={"username": "admin", "password": PLAIN_PASSWORD},
+    )
+    response = client_with_auth.get("/")
+    assert response.status_code == 200
+    assert "admin" in response.text
+
+
+def test_upstream_mode_displays_x_auth_request_user(client_no_auth) -> None:  # type: ignore[no-untyped-def]
+    """oauth2-proxy puts the user in X-Auth-Request-User; show it."""
+    response = client_no_auth.get(
+        "/",
+        headers={"X-Auth-Request-User": "carla@example.test"},
+    )
+    assert response.status_code == 200
+    assert "carla@example.test" in response.text
+
+
+def test_auth_mode_property_resolves_correctly(auth_hash: str) -> None:
+    """Settings.auth_mode picks OIDC > builtin > upstream."""
+    upstream = Settings(
+        openvpn_host="127.0.0.1",
+        openvpn_port=5555,
+    )
+    builtin = Settings(
+        openvpn_host="127.0.0.1",
+        openvpn_port=5555,
+        auth_password_hash=auth_hash,
+        session_secret="x" * 64,  # pragma: allowlist secret
+    )
+    assert upstream.auth_mode == "upstream"
+    assert builtin.auth_mode == "builtin"

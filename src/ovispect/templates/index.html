@@ -279,6 +279,12 @@
                     <button type="button" class="fs-btn" data-fontsize="m" aria-pressed="true" title="Medium">M</button>
                     <button type="button" class="fs-btn" data-fontsize="l" aria-pressed="false" title="Large">L</button>
                 </div>
+                {% if username %}
+                <span class="text-[10px] uppercase tracking-[0.14em] text-neutral-400" title="Signed-in user">
+                    <span class="text-neutral-600">user</span>
+                    <span class="ml-1 text-neutral-200 normal-case tracking-normal">{{ username }}</span>
+                </span>
+                {% endif %}
                 {% if show_logout %}
                 <form method="post" action="/logout" class="flex">
                     <button
