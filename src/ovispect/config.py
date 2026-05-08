@@ -225,6 +225,18 @@ class Settings(BaseSettings):
         ),
     )
 
+    @field_validator(
+        "oidc_issuer_url",
+        "oidc_redirect_uri",
+        "oidc_logout_redirect_uri",
+        mode="before",
+    )
+    @classmethod
+    def _empty_url_to_none(cls, value: object) -> object:
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
     @field_validator("oidc_required_groups", mode="before")
     @classmethod
     def _coerce_groups(cls, value: object) -> str:

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-05-08
+
+### Fixed
+
+- Empty values for the optional OIDC URL settings (`OIDC_ISSUER_URL`,
+  `OIDC_REDIRECT_URI`, `OIDC_LOGOUT_REDIRECT_URI`) no longer crash startup
+  with a Pydantic `url_parsing` error. Empty strings are now coerced to
+  unset, matching how a missing variable behaves.
+
 ## [0.8.0] - 2026-05-08
 
 ### Added
