@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.3] - 2026-05-09
+
 ### Added
 
 - New deployment example `compose.shared-network-oidc.example.yml` for
@@ -360,7 +362,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Test suite (41 tests) covering parser, formatting helpers, and HTTP
   routes via FastAPI's `TestClient`.
 
-[Unreleased]: https://github.com/Upellift99/ovispect/compare/v0.8.2...HEAD
+[Unreleased]: https://github.com/Upellift99/ovispect/compare/v0.8.3...HEAD
+[0.8.3]: https://github.com/Upellift99/ovispect/releases/tag/v0.8.3
 [0.8.2]: https://github.com/Upellift99/ovispect/releases/tag/v0.8.2
 [0.8.1]: https://github.com/Upellift99/ovispect/releases/tag/v0.8.1
 [0.8.0]: https://github.com/Upellift99/ovispect/releases/tag/v0.8.0
