@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- New deployment example `compose.shared-network-oidc.example.yml` for
+  the common case of OIDC authentication combined with a shared Docker
+  bridge network reaching the OpenVPN management interface on the host.
+- README "Deployment examples" table that maps each `compose.*.example.yml`
+  file to its target scenario.
+
 ## [0.8.2] - 2026-05-09
 
 ### Fixed

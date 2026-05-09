@@ -1,0 +1,110 @@
+# Variant of compose.oidc.example.yml that joins ovispect to a shared
+# Docker bridge network with a stable subnet, instead of letting Compose
+# create a fresh per-project network and publishing ports on the host.
+#
+# Use this layout when:
+#   - The OpenVPN management interface is reachable from the bridge IP of
+#     this network (e.g. `management 0.0.0.0 7505` on the host so the
+#     container can connect via the bridge gateway 192.168.32.1).
+#   - A reverse proxy on the same host (Traefik, BunkerWeb, Caddy…)
+#     terminates TLS in front of ovispect and reaches it through the
+#     same `skynet` network — no port needs to be published on 0.0.0.0.
+#   - You already run other services on the host that need to talk to
+#     ovispect (Prometheus, internal proxy…) — joining them to the same
+#     `skynet` network is simpler than publishing every port.
+#
+# Authentication is handled natively by ovispect against your OIDC
+# provider (Authorization Code + PKCE). No oauth2-proxy / ForwardAuth
+# layer is required and built-in basic auth is not used.
+#
+# The network is declared `external: false` here so Docker Compose
+# creates it on first `up` if it doesn't exist yet. If the network is
+# already managed by another stack on this host, replace the `networks:`
+# block at the bottom with:
+#
+#     networks:
+#       skynet:
+#         external: true
+#         name: skynet
+#
+# …and Compose will attach to the pre-existing one.
+#
+# No `ports:` are published by default — reverse proxies talk to the
+# container via the bridge. If you need a local debug exposure, add:
+#
+#     ports:
+#       - "127.0.0.1:8000:8000"
+#
+# Provider checklist (Keycloak example):
+#   1. Create a confidential client named "ovispect"
+#   2. Enable "Standard flow" (Authorization Code) and "Client authentication"
+#   3. Set Valid Redirect URI:    https://<your-host>/oidc/callback
+#   4. Set Valid post-logout URI: https://<your-host>/  (or leave empty)
+#   5. Optionally map a "groups" claim into the ID token if you plan to
+#      restrict access via OIDC_REQUIRED_GROUPS
+#
+# Then populate .env:
+#       OIDC_ISSUER_URL=https://sso.example.com/realms/internal
+#       OIDC_CLIENT_ID=ovispect
+#       OIDC_CLIENT_SECRET=...
+#       SESSION_SECRET=$(openssl rand -hex 32)
+#       OPENVPN_HOST=192.168.32.1
+#       OPENVPN_PORT=7505
+#       (optional) OIDC_REQUIRED_GROUPS=admins,vpn-monitors
+#
+# Run:   docker compose -f compose.shared-network-oidc.example.yml up -d
+
+services:
+  ovispect:
+    image: ghcr.io/upellift99/ovispect:latest
+    container_name: ovispect
+    restart: unless-stopped
+    environment:
+      OPENVPN_HOST: ${OPENVPN_HOST:?set OPENVPN_HOST in .env}
+      OPENVPN_PORT: ${OPENVPN_PORT:?set OPENVPN_PORT in .env}
+      OPENVPN_PASSWORD: ${OPENVPN_PASSWORD:-}
+      SITE_NAME: ${SITE_NAME:-OpenVPN}
+      REFRESH_SECONDS: ${REFRESH_SECONDS:-10}
+      TIMEZONE: ${TIMEZONE:-UTC}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+
+      # --- OIDC ---
+      OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:?set OIDC_ISSUER_URL in .env}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:?set OIDC_CLIENT_ID in .env}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:?set OIDC_CLIENT_SECRET in .env}
+      OIDC_SCOPES: ${OIDC_SCOPES:-openid profile email}
+      OIDC_USERNAME_CLAIM: ${OIDC_USERNAME_CLAIM:-preferred_username}
+      OIDC_REQUIRED_GROUPS: ${OIDC_REQUIRED_GROUPS:-}
+      OIDC_GROUPS_CLAIM: ${OIDC_GROUPS_CLAIM:-groups}
+      OIDC_VERIFY_SSL: ${OIDC_VERIFY_SSL:-true}
+      # If your reverse proxy terminates TLS and rewrites Host, set this
+      # explicitly so the redirect_uri sent to the provider matches what
+      # you registered:
+      # OIDC_REDIRECT_URI: https://ovispect.example.com/oidc/callback
+      OIDC_LOGOUT_REDIRECT_URI: ${OIDC_LOGOUT_REDIRECT_URI:-}
+
+      # --- Session ---
+      SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET in .env}
+      SESSION_LIFETIME_SECONDS: ${SESSION_LIFETIME_SECONDS:-86400}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-true}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:8000/healthz"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - skynet
+
+networks:
+  skynet:
+    name: skynet
+    ipam:
+      driver: default
+      config:
+        - subnet: "192.168.32.0/24"

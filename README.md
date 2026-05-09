@@ -236,6 +236,19 @@ will display the user in the dashboard header. Whichever proxy you pick,
 never expose ovispect (or the OpenVPN management interface) directly to
 the public internet.
 
+### Deployment examples
+
+Pick the compose file that matches your topology, copy it next to a
+`.env`, and `docker compose -f <file> up -d`:
+
+| File | Scenario |
+|------|----------|
+| `compose.example.yml` | Mode 2 standalone — built-in auth, port published on `127.0.0.1`. |
+| `compose.oidc.example.yml` | Mode 1 native OIDC — port published on `127.0.0.1`, fronted by your reverse proxy. |
+| `compose.reverse-proxy.example.yml` | Mode 3 — no in-app auth, an upstream proxy (oauth2-proxy, basic auth, …) gates access. |
+| `compose.shared-network.example.yml` | Mode 2 on a shared `skynet` bridge (`192.168.32.0/24`) — useful when OpenVPN's management interface lives on the host gateway and other containers need to reach ovispect without published ports. |
+| `compose.shared-network-oidc.example.yml` | **Mode 1 OIDC on the same shared `skynet` bridge** — common production layout: OpenVPN on the host, ovispect behind a same-host reverse proxy that terminates TLS. |
+
 ### Auth-related environment variables
 
 | Variable                     | Default                | Notes                                                                                  |
