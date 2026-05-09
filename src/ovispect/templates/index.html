@@ -253,25 +253,25 @@
 </head>
 <body class="min-h-screen font-mono antialiased">
 
-<div class="mx-auto max-w-6xl px-6 pt-10 pb-16">
+<div class="mx-auto max-w-6xl px-3 sm:px-6 pt-5 sm:pt-10 pb-10 sm:pb-16">
 
     <header class="pb-5">
-        <div class="flex items-center justify-between gap-6 flex-wrap">
-            <div class="flex items-center gap-3">
+        <div class="flex items-center justify-between gap-3 sm:gap-6 flex-wrap">
+            <div class="flex items-center gap-3 min-w-0">
                 <span id="status-dot" class="pulse-dot {% if is_error %}is-error{% elif is_stale %}is-stale{% else %}is-live{% endif %}" aria-hidden="true"></span>
-                <h1 class="font-sans text-lg font-semibold tracking-tight text-neutral-100">
+                <h1 class="font-sans text-base sm:text-lg font-semibold tracking-tight text-neutral-100 truncate">
                     {{ site_name }}
                 </h1>
-                <span class="text-neutral-400 text-xs tracking-wide uppercase">/ ovispect</span>
+                <span class="hidden sm:inline text-neutral-400 text-xs tracking-wide uppercase">/ ovispect</span>
             </div>
 
-            <div class="flex items-center gap-6 text-xs text-neutral-300 tabular">
+            <div class="flex items-center gap-3 sm:gap-6 flex-wrap text-xs text-neutral-300 tabular">
                 <div class="flex items-baseline gap-2">
                     <span class="text-neutral-400 uppercase tracking-wider text-[10px]">connected</span>
                     <span id="connected-count" class="text-neutral-100 text-base font-medium">{{ clients_connected }}</span>
                 </div>
                 <div class="flex items-baseline gap-2" title="{{ fetched_at_iso }}">
-                    <span class="text-neutral-400 uppercase tracking-wider text-[10px]">last fetch</span>
+                    <span class="hidden sm:inline text-neutral-400 uppercase tracking-wider text-[10px]">last fetch</span>
                     <span id="last-fetch" class="text-neutral-100">{{ fetched_at_local }}</span>
                 </div>
                 <div class="fs-group" role="group" aria-label="Font size">
@@ -280,7 +280,7 @@
                     <button type="button" class="fs-btn" data-fontsize="l" aria-pressed="false" title="Large">L</button>
                 </div>
                 {% if username %}
-                <span class="text-[10px] uppercase tracking-[0.14em] text-neutral-400" title="Signed-in user">
+                <span class="hidden sm:inline-block text-[10px] uppercase tracking-[0.14em] text-neutral-400" title="Signed-in user">
                     <span class="text-neutral-600">user</span>
                     <span class="ml-1 text-neutral-200 normal-case tracking-normal">{{ username }}</span>
                 </span>
@@ -336,24 +336,24 @@
             <table class="w-full text-sm">
                 <thead>
                     <tr class="text-[10px] uppercase tracking-[0.12em] text-neutral-300">
-                        <th class="text-left font-medium px-4 py-3 border-b border-neutral-800" data-sort-key="common_name" data-sort-type="text">Common name<span class="sort-arrow"></span></th>
-                        <th class="text-left font-medium px-4 py-3 border-b border-neutral-800" data-sort-key="real_address_short" data-sort-type="text">Real address<span class="sort-arrow"></span></th>
-                        <th class="text-left font-medium px-4 py-3 border-b border-neutral-800" data-sort-key="virtual_address" data-sort-type="text">Virtual<span class="sort-arrow"></span></th>
-                        <th class="text-right font-medium px-4 py-3 border-b border-neutral-800" data-sort-key="bytes_received" data-sort-type="number">RX<span class="sort-arrow"></span></th>
-                        <th class="text-right font-medium px-4 py-3 border-b border-neutral-800" data-sort-key="bytes_sent" data-sort-type="number">TX<span class="sort-arrow"></span></th>
-                        <th class="text-right font-medium px-4 py-3 border-b border-neutral-800" data-sort-key="connected_for_seconds" data-sort-type="number">Connected<span class="sort-arrow"></span></th>
+                        <th class="text-left font-medium px-3 sm:px-4 py-2.5 sm:py-3 border-b border-neutral-800" data-sort-key="common_name" data-sort-type="text">Common name<span class="sort-arrow"></span></th>
+                        <th class="text-left font-medium px-3 sm:px-4 py-2.5 sm:py-3 border-b border-neutral-800" data-sort-key="real_address_short" data-sort-type="text">Real address<span class="sort-arrow"></span></th>
+                        <th class="hidden sm:table-cell text-left font-medium px-3 sm:px-4 py-2.5 sm:py-3 border-b border-neutral-800" data-sort-key="virtual_address" data-sort-type="text">Virtual<span class="sort-arrow"></span></th>
+                        <th class="text-right font-medium px-3 sm:px-4 py-2.5 sm:py-3 border-b border-neutral-800" data-sort-key="bytes_received" data-sort-type="number">RX<span class="sort-arrow"></span></th>
+                        <th class="text-right font-medium px-3 sm:px-4 py-2.5 sm:py-3 border-b border-neutral-800" data-sort-key="bytes_sent" data-sort-type="number">TX<span class="sort-arrow"></span></th>
+                        <th class="hidden sm:table-cell text-right font-medium px-3 sm:px-4 py-2.5 sm:py-3 border-b border-neutral-800" data-sort-key="connected_for_seconds" data-sort-type="number">Connected<span class="sort-arrow"></span></th>
                     </tr>
                 </thead>
                 <tbody id="clients-tbody">
                     {% if rows %}
                         {% for row in rows %}
                         <tr class="border-b border-neutral-900 last:border-b-0">
-                            <td class="px-4 py-2.5 text-neutral-100">{{ row.common_name }}</td>
-                            <td class="px-4 py-2.5 text-neutral-300 tabular" title="{{ row.real_address_full }}">{% if row.country_flag %}<span class="country-flag" title="{{ row.country_code }}">{{ row.country_flag }}</span>{% endif %}{{ row.real_address_short }}</td>
-                            <td class="px-4 py-2.5 text-neutral-400 tabular">{{ row.virtual_address }}</td>
-                            <td class="px-4 py-2.5 text-right text-neutral-200 tabular">{{ row.bytes_received_human }}</td>
-                            <td class="px-4 py-2.5 text-right text-neutral-200 tabular">{{ row.bytes_sent_human }}</td>
-                            <td class="px-4 py-2.5 text-right text-neutral-300 tabular" title="{{ row.connected_absolute }}">{{ row.connected_relative }}</td>
+                            <td class="px-3 sm:px-4 py-2 sm:py-2.5 text-neutral-100 break-all">{{ row.common_name }}</td>
+                            <td class="px-3 sm:px-4 py-2 sm:py-2.5 text-neutral-300 tabular" title="{{ row.real_address_full }}">{% if row.country_flag %}<span class="country-flag" title="{{ row.country_code }}">{{ row.country_flag }}</span>{% endif %}{{ row.real_address_short }}</td>
+                            <td class="hidden sm:table-cell px-3 sm:px-4 py-2 sm:py-2.5 text-neutral-400 tabular">{{ row.virtual_address }}</td>
+                            <td class="px-3 sm:px-4 py-2 sm:py-2.5 text-right text-neutral-200 tabular">{{ row.bytes_received_human }}</td>
+                            <td class="px-3 sm:px-4 py-2 sm:py-2.5 text-right text-neutral-200 tabular">{{ row.bytes_sent_human }}</td>
+                            <td class="hidden sm:table-cell px-3 sm:px-4 py-2 sm:py-2.5 text-right text-neutral-300 tabular" title="{{ row.connected_absolute }}">{{ row.connected_relative }}</td>
                         </tr>
                         {% endfor %}
                     {% else %}
@@ -372,10 +372,10 @@
                 </tbody>
                 <tfoot id="totals-tfoot" class="{% if not rows %}hidden{% endif %}">
                     <tr class="text-[10px] uppercase tracking-[0.12em] text-neutral-300 border-t border-neutral-700 bg-neutral-800/60">
-                        <td class="px-4 py-2.5 font-medium" colspan="3">Total</td>
-                        <td id="total-rx" class="px-4 py-2.5 text-right text-neutral-100 tabular">{{ total_bytes_received_human }}</td>
-                        <td id="total-tx" class="px-4 py-2.5 text-right text-neutral-100 tabular">{{ total_bytes_sent_human }}</td>
-                        <td id="total-count" class="px-4 py-2.5 text-right text-neutral-100 tabular">{{ clients_connected }}</td>
+                        <td class="px-3 sm:px-4 py-2.5 font-medium" colspan="3">Total</td>
+                        <td id="total-rx" class="px-3 sm:px-4 py-2.5 text-right text-neutral-100 tabular">{{ total_bytes_received_human }}</td>
+                        <td id="total-tx" class="px-3 sm:px-4 py-2.5 text-right text-neutral-100 tabular">{{ total_bytes_sent_human }}</td>
+                        <td id="total-count" class="hidden sm:table-cell px-3 sm:px-4 py-2.5 text-right text-neutral-100 tabular">{{ clients_connected }}</td>
                     </tr>
                 </tfoot>
             </table>
@@ -560,12 +560,12 @@
                 : '';
             return `
             <tr class="${cls}" data-row-key="${escapeHtml(keyOf(c))}">
-                <td class="px-4 py-2.5 text-neutral-100">${escapeHtml(c.common_name)}</td>
-                <td class="px-4 py-2.5 text-neutral-300 tabular" title="${escapeHtml(c.real_address_full)}">${flag}${escapeHtml(c.real_address_short)}</td>
-                <td class="px-4 py-2.5 text-neutral-400 tabular">${escapeHtml(c.virtual_address)}</td>
-                <td class="px-4 py-2.5 text-right text-neutral-200 tabular">${escapeHtml(c.bytes_received_human)}</td>
-                <td class="px-4 py-2.5 text-right text-neutral-200 tabular">${escapeHtml(c.bytes_sent_human)}</td>
-                <td class="px-4 py-2.5 text-right text-neutral-300 tabular" title="${escapeHtml(c.connected_absolute)}">${escapeHtml(c.connected_relative)}</td>
+                <td class="px-3 sm:px-4 py-2 sm:py-2.5 text-neutral-100 break-all">${escapeHtml(c.common_name)}</td>
+                <td class="px-3 sm:px-4 py-2 sm:py-2.5 text-neutral-300 tabular" title="${escapeHtml(c.real_address_full)}">${flag}${escapeHtml(c.real_address_short)}</td>
+                <td class="hidden sm:table-cell px-3 sm:px-4 py-2 sm:py-2.5 text-neutral-400 tabular">${escapeHtml(c.virtual_address)}</td>
+                <td class="px-3 sm:px-4 py-2 sm:py-2.5 text-right text-neutral-200 tabular">${escapeHtml(c.bytes_received_human)}</td>
+                <td class="px-3 sm:px-4 py-2 sm:py-2.5 text-right text-neutral-200 tabular">${escapeHtml(c.bytes_sent_human)}</td>
+                <td class="hidden sm:table-cell px-3 sm:px-4 py-2 sm:py-2.5 text-right text-neutral-300 tabular" title="${escapeHtml(c.connected_absolute)}">${escapeHtml(c.connected_relative)}</td>
             </tr>`;
         }).join('');
         tbody.innerHTML = html;

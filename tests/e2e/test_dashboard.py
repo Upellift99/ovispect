@@ -64,3 +64,37 @@ def test_font_size_selector_persists_across_reload(live_server: str, page: Page)
     page.reload()
     expect(html).to_have_attribute("data-font-size", "l")
     expect(page.locator('.fs-btn[data-fontsize="l"]')).to_have_attribute("aria-pressed", "true")
+
+
+def test_dashboard_collapses_secondary_columns_on_mobile(
+    live_server: str, page: Page
+) -> None:
+    """Below Tailwind's `sm` breakpoint (640 px) the secondary columns and
+    the noisier header bits are hidden so the dashboard fits a phone."""
+    cn = page.locator('th[data-sort-key="common_name"]')
+    real = page.locator('th[data-sort-key="real_address_short"]')
+    virtual = page.locator('th[data-sort-key="virtual_address"]')
+    rx = page.locator('th[data-sort-key="bytes_received"]')
+    tx = page.locator('th[data-sort-key="bytes_sent"]')
+    connected = page.locator('th[data-sort-key="connected_for_seconds"]')
+    sub_label = page.locator("header span", has_text="/ ovispect")
+
+    # iPhone-SE-ish viewport — well under the 640 px sm breakpoint.
+    page.set_viewport_size({"width": 375, "height": 800})
+    page.goto(live_server)
+
+    expect(cn).to_be_visible()
+    expect(real).to_be_visible()
+    expect(rx).to_be_visible()
+    expect(tx).to_be_visible()
+    # Virtual + Connected hidden on mobile to keep the table within the
+    # viewport — the values stay reachable through the per-row drawer.
+    expect(virtual).to_be_hidden()
+    expect(connected).to_be_hidden()
+    expect(sub_label).to_be_hidden()
+
+    # Above the breakpoint everything is back.
+    page.set_viewport_size({"width": 1280, "height": 800})
+    expect(virtual).to_be_visible()
+    expect(connected).to_be_visible()
+    expect(sub_label).to_be_visible()

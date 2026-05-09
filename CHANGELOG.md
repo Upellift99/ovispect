@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Dashboard layout is now responsive on mobile. Below Tailwind's `sm`
+  breakpoint (640 px) the table drops the *Virtual* and *Connected*
+  columns (still reachable through the per-row drawer), the container
+  paddings shrink, and the header collapses its secondary labels. Pages
+  that already used `max-w-md` (login / forbidden / login_error) were
+  fine and were not touched.
+
+### Added
+
+- New Playwright e2e test
+  `test_dashboard_collapses_secondary_columns_on_mobile` that asserts
+  the column-collapsing behaviour on a 375 px viewport.
+
 ## [0.8.3] - 2026-05-09
 
 ### Added
