@@ -249,6 +249,117 @@
             word-break: break-all;
         }
         .drawer-fields dd.empty { color: #737373; font-style: italic; }
+
+        /* Mobile (< sm = 640px): collapse the data table into a card-style
+           grid so each client gets a tidy two-row block instead of a cramped
+           multi-column table. The desktop table layout is unchanged. */
+        @media (max-width: 639px) {
+            table.responsive { display: block; }
+            table.responsive thead { display: none; }
+            table.responsive tbody,
+            table.responsive tfoot { display: block; }
+
+            table.responsive tbody tr {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) auto;
+                grid-template-areas:
+                    "name rx"
+                    "addr tx";
+                column-gap: 12px;
+                row-gap: 2px;
+                padding: 10px 12px;
+                align-items: baseline;
+            }
+            /* Promote only the four visible cells to grid items. Cells 3
+               (virtual) and 6 (connected) keep their `hidden` display:none. */
+            table.responsive tbody tr > td:nth-child(1),
+            table.responsive tbody tr > td:nth-child(2),
+            table.responsive tbody tr > td:nth-child(4),
+            table.responsive tbody tr > td:nth-child(5) {
+                display: block;
+                padding: 0;
+                border: 0;
+            }
+            table.responsive tbody td:nth-child(1) {
+                grid-area: name;
+                min-width: 0;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+            table.responsive tbody td:nth-child(2) {
+                grid-area: addr;
+                min-width: 0;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+                font-size: 11px;
+                color: #a3a3a3;
+            }
+            table.responsive tbody td:nth-child(4) {
+                grid-area: rx;
+                text-align: right;
+                white-space: nowrap;
+            }
+            table.responsive tbody td:nth-child(5) {
+                grid-area: tx;
+                text-align: right;
+                white-space: nowrap;
+            }
+            table.responsive tbody td:nth-child(4)::before,
+            table.responsive tbody td:nth-child(5)::before {
+                color: #525252;
+                font-size: 9px;
+                letter-spacing: 0.12em;
+                margin-right: 4px;
+            }
+            table.responsive tbody td:nth-child(4)::before { content: 'RX'; }
+            table.responsive tbody td:nth-child(5)::before { content: 'TX'; }
+
+            /* Empty / no-match row keeps a centered placeholder. */
+            table.responsive tbody tr#empty-row,
+            table.responsive tbody tr.row-empty {
+                display: block;
+                padding: 0;
+            }
+            table.responsive tbody tr#empty-row > td,
+            table.responsive tbody tr.row-empty > td {
+                display: block;
+                padding: 3rem 1rem;
+            }
+
+            /* Totals footer mirrors the card layout (label · RX · TX). */
+            table.responsive tfoot tr {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) auto auto;
+                grid-template-areas: "label rx tx";
+                column-gap: 14px;
+                padding: 10px 12px;
+                align-items: center;
+            }
+            table.responsive tfoot tr > td:nth-child(1),
+            table.responsive tfoot tr > td:nth-child(2),
+            table.responsive tfoot tr > td:nth-child(3) {
+                display: block;
+                padding: 0;
+                border: 0;
+            }
+            table.responsive tfoot td:nth-child(1) { grid-area: label; }
+            table.responsive tfoot td:nth-child(2) {
+                grid-area: rx;
+                text-align: right;
+                white-space: nowrap;
+            }
+            table.responsive tfoot td:nth-child(3) {
+                grid-area: tx;
+                text-align: right;
+                white-space: nowrap;
+            }
+
+            /* Hide the S/M/L font-size selector on mobile — pinch-zoom
+               handles this already and it crowds the header. */
+            .fs-group { display: none; }
+        }
     </style>
 </head>
 <body class="min-h-screen font-mono antialiased">
@@ -333,7 +444,7 @@
 
     <section class="mt-3 overflow-hidden rounded border border-neutral-800 bg-neutral-950/40">
         <div class="overflow-x-auto scroll-x">
-            <table class="w-full text-sm">
+            <table class="responsive w-full text-sm">
                 <thead>
                     <tr class="text-[10px] uppercase tracking-[0.12em] text-neutral-300">
                         <th class="text-left font-medium px-3 sm:px-4 py-2.5 sm:py-3 border-b border-neutral-800" data-sort-key="common_name" data-sort-type="text">Common name<span class="sort-arrow"></span></th>
