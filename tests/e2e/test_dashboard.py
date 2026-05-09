@@ -66,9 +66,7 @@ def test_font_size_selector_persists_across_reload(live_server: str, page: Page)
     expect(page.locator('.fs-btn[data-fontsize="l"]')).to_have_attribute("aria-pressed", "true")
 
 
-def test_dashboard_collapses_secondary_columns_on_mobile(
-    live_server: str, page: Page
-) -> None:
+def test_dashboard_collapses_secondary_columns_on_mobile(live_server: str, page: Page) -> None:
     """Below Tailwind's `sm` breakpoint (640 px) the secondary columns and
     the noisier header bits are hidden so the dashboard fits a phone."""
     cn = page.locator('th[data-sort-key="common_name"]')
