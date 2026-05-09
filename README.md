@@ -123,11 +123,26 @@ OIDC_REQUIRED_GROUPS=admins,vpn-monitors
 Configure your IdP with the redirect URI:
 `https://<your-host>/oidc/callback`. ovispect implements Authorization
 Code Flow with PKCE (S256) and validates `iss`, `aud`, `exp` and `iat` on
-every id_token. Tokens never leave the server — they are stored in a
-signed Starlette session cookie. The "Sign out" button triggers a
-provider-side logout via `end_session_endpoint`.
+every id_token. The "Sign out" button triggers a provider-side logout
+via `end_session_endpoint`.
 
 A drop-in `compose.oidc.example.yml` is provided in this repo.
+
+#### Session model
+
+ovispect stores only the user identity claims in the session cookie
+(`sub`, `email`, `preferred_username`, `groups`, etc.). It does not
+store the raw OIDC tokens (`id_token`, `access_token`, `refresh_token`):
+they are validated at the callback, the useful claims are extracted,
+and the tokens themselves are dropped. The session cookie is therefore
+small (~200–500 bytes) and remains well below browser size limits — a
+4–6 KB cookie is silently rejected by most browsers, which would
+manifest as an authentication redirect loop.
+
+When the session expires, the user is redirected back to the OIDC
+provider. As long as the user's SSO session at the provider is still
+active, this re-authentication is transparent (no credentials to
+re-enter).
 
 #### OIDC provider examples
 

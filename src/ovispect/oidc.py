@@ -4,8 +4,9 @@ Implements OpenID Connect 1.0 Authorization Code Flow + PKCE (S256) against
 a single configured provider. Discovery is performed at startup; failure is
 fatal — ovispect refuses to boot rather than silently degrading.
 
-Token storage lives entirely server-side, in the Starlette signed session
-cookie. The browser never sees ``id_token`` or ``refresh_token``.
+Only the validated user-identity claims are persisted in the Starlette
+session — never the raw ``id_token``, ``access_token`` or ``refresh_token``.
+This keeps the cookie comfortably under the 4 KB browser limit.
 """
 
 from __future__ import annotations
@@ -34,6 +35,22 @@ logger = logging.getLogger(__name__)
 OIDC_SESSION_KEY = "oidc"
 PENDING_KEY = "oidc_state"
 DISCOVERY_PATH = "/.well-known/openid-configuration"
+
+# Identity claims kept in the session cookie. Everything else (raw tokens,
+# audience claims, signature metadata, …) is dropped on purpose.
+_SAFE_SESSION_CLAIMS: frozenset[str] = frozenset(
+    {
+        "sub",
+        "preferred_username",
+        "email",
+        "name",
+        "given_name",
+        "family_name",
+        "groups",
+        "exp",
+        "iat",
+    }
+)
 
 _JWKS_REFRESH_TTL_SECONDS = 3600
 _HTTP_TIMEOUT_SECONDS = 10.0
@@ -220,7 +237,9 @@ class OIDCClient:
     ) -> dict[str, Any]:
         """Exchange ``code`` for tokens, validate the id_token, populate session.
 
-        Returns a dict with ``claims`` and ``next`` (the originally-requested
+        Only the safe identity claims are kept; the raw tokens are dropped
+        as soon as validation succeeds (see module docstring for rationale).
+        Returns a dict with ``user`` and ``next`` (the originally-requested
         path, or empty string if none/unsafe).
         """
         pending = request.session.get(PENDING_KEY)
@@ -240,14 +259,25 @@ class OIDCClient:
             raise OIDCError("missing_id_token")
         claims = await self._validate_id_token(id_token)
 
+        user = self._extract_user(claims)
         request.session[OIDC_SESSION_KEY] = {
-            "claims": claims,
-            "id_token": id_token,
-            "access_token": token.get("access_token"),
-            "refresh_token": token.get("refresh_token"),
-            "expires_at": int(time.time()) + int(token.get("expires_in") or 0),
+            "user": user,
+            "authenticated_at": int(time.time()),
         }
-        return {"claims": claims, "next": next_path if is_safe_next(next_path) else ""}
+        return {"user": user, "next": next_path if is_safe_next(next_path) else ""}
+
+    def _extract_user(self, claims: dict[str, Any]) -> dict[str, Any]:
+        """Project the validated claims down to the identity fields we keep.
+
+        Always includes the configured username and groups claims so that
+        non-default ``OIDC_USERNAME_CLAIM`` / ``OIDC_GROUPS_CLAIM`` settings
+        survive the projection.
+        """
+        keep = _SAFE_SESSION_CLAIMS | {
+            self._settings.oidc_username_claim,
+            self._settings.oidc_groups_claim,
+        }
+        return {k: claims[k] for k in keep if k in claims}
 
     async def _exchange_code(
         self,
@@ -329,52 +359,6 @@ class OIDCClient:
         self._jwks_fetched_at = now
         return keyset
 
-    # ---- Refresh --------------------------------------------------------------
-
-    async def refresh_session(self, request: Request) -> bool:  # noqa: PLR0911
-        """Try to refresh the active session using the stored refresh token."""
-        session = request.session.get(OIDC_SESSION_KEY)
-        if not isinstance(session, dict):
-            return False
-        refresh_token = session.get("refresh_token")
-        if not isinstance(refresh_token, str) or not refresh_token:
-            return False
-        data = {
-            "grant_type": "refresh_token",
-            "refresh_token": refresh_token,
-            "client_id": self._settings.oidc_client_id,
-            "client_secret": self._settings.oidc_client_secret.get_secret_value(),
-        }
-        try:
-            async with self._http_client_factory() as client:
-                response = await client.post(self._discovery.token_endpoint, data=data)
-        except httpx.HTTPError as exc:
-            logger.warning("oidc refresh request failed: %s", exc)
-            return False
-        if response.status_code != 200:
-            logger.info("oidc refresh rejected by provider (status=%s)", response.status_code)
-            return False
-        try:
-            token = cast("dict[str, Any]", response.json())
-        except ValueError:
-            return False
-        new_id_token = token.get("id_token")
-        try:
-            if isinstance(new_id_token, str):
-                claims = await self._validate_id_token(new_id_token)
-                session["claims"] = claims
-                session["id_token"] = new_id_token
-        except OIDCError as exc:
-            logger.warning("refreshed id_token failed validation: %s", exc.code)
-            return False
-        if "access_token" in token:
-            session["access_token"] = token["access_token"]
-        if "refresh_token" in token:
-            session["refresh_token"] = token["refresh_token"]
-        session["expires_at"] = int(time.time()) + int(token.get("expires_in") or 0)
-        request.session[OIDC_SESSION_KEY] = session
-        return True
-
     # ---- Logout ---------------------------------------------------------------
 
     def logout_url(
@@ -383,14 +367,16 @@ class OIDCClient:
         *,
         post_logout_redirect_uri: str | None = None,
     ) -> str | None:
-        """Build the provider-side end_session URL, or None if unsupported."""
+        """Build the provider-side end_session URL, or None if unsupported.
+
+        We no longer carry an ``id_token_hint`` because the raw id_token is
+        not retained server-side. Modern providers (Keycloak ≥ 18, Authelia,
+        Authentik, Zitadel) accept ``client_id`` + ``post_logout_redirect_uri``
+        as a sufficient hint pair.
+        """
         if self._discovery.end_session_endpoint is None:
             return None
-        session = request.session.get(OIDC_SESSION_KEY) or {}
         params: dict[str, str] = {"client_id": self._settings.oidc_client_id}
-        id_token = session.get("id_token") if isinstance(session, dict) else None
-        if isinstance(id_token, str):
-            params["id_token_hint"] = id_token
         if post_logout_redirect_uri:
             params["post_logout_redirect_uri"] = post_logout_redirect_uri
         return f"{self._discovery.end_session_endpoint}?{urlencode(params)}"
@@ -425,34 +411,37 @@ def get_session(request: Request) -> dict[str, Any] | None:
 
 
 def session_username(settings: Settings, payload: dict[str, Any] | None) -> str | None:
-    if not payload:
+    user = _user_from_payload(payload)
+    if user is None:
         return None
-    claims = payload.get("claims")
-    if not isinstance(claims, dict):
-        return None
-    value = claims.get(settings.oidc_username_claim)
+    value = user.get(settings.oidc_username_claim)
     if isinstance(value, str) and value:
         return value
     # Fallback chain: email, sub.
     for fallback in ("email", "sub"):
-        candidate = claims.get(fallback)
+        candidate = user.get(fallback)
         if isinstance(candidate, str) and candidate:
             return candidate
     return None
 
 
 def session_groups(settings: Settings, payload: dict[str, Any] | None) -> list[str]:
-    if not payload:
+    user = _user_from_payload(payload)
+    if user is None:
         return []
-    claims = payload.get("claims")
-    if not isinstance(claims, dict):
-        return []
-    raw = claims.get(settings.oidc_groups_claim)
+    raw = user.get(settings.oidc_groups_claim)
     if isinstance(raw, list):
         return [str(g) for g in raw]
     if isinstance(raw, str):
         return [g.strip() for g in raw.split(",") if g.strip()]
     return []
+
+
+def _user_from_payload(payload: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not payload:
+        return None
+    user = payload.get("user")
+    return user if isinstance(user, dict) else None
 
 
 def has_required_groups(settings: Settings, groups: list[str]) -> bool:
@@ -470,28 +459,21 @@ def clear_session(request: Request) -> None:
         return
 
 
-def session_is_expired(payload: dict[str, Any], *, leeway: int = 30) -> bool:
-    expires_at = payload.get("expires_at")
-    if not isinstance(expires_at, int) or expires_at <= 0:
-        return False
-    return time.time() > (expires_at - leeway)
-
-
 def require_oidc_auth_factory(
     settings: Settings,
     client: OIDCClient,
 ) -> Callable[[Request], Awaitable[dict[str, Any]]]:
-    """Build the FastAPI dependency that enforces OIDC authentication."""
+    """Build the FastAPI dependency that enforces OIDC authentication.
+
+    Session expiration is handled by the Starlette signed cookie itself
+    (see ``SESSION_LIFETIME_SECONDS``). When it lapses the user is bounced
+    to ``/login`` and re-authenticated transparently as long as their SSO
+    session at the provider is still active — so we don't need to track
+    refresh tokens or run a silent renewal on every request.
+    """
 
     async def _require(request: Request) -> dict[str, Any]:
         payload = get_session(request)
-        if payload and session_is_expired(payload):
-            refreshed = await client.refresh_session(request)
-            if refreshed:
-                payload = get_session(request)
-            else:
-                clear_session(request)
-                payload = None
         if payload is None:
             path = request.url.path
             if request.url.query:

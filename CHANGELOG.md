@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.2] - 2026-05-09
+
+### Fixed
+
+- Authentication redirect loop caused by an oversized session cookie
+  (4–6 KB) being silently rejected by browsers. The session now only
+  stores validated user identity claims (`sub`, `email`,
+  `preferred_username`, `groups`, …), not the raw OIDC tokens. Cookie
+  size drops to ~200–500 bytes — well under the 4 KB browser ceiling.
+
+### Removed
+
+- Silent refresh-token logic. When the session expires, the user is
+  bounced back to the OIDC provider for re-authentication, which is
+  transparent as long as their SSO session is still active. This
+  simplifies the request path and eliminates a class of edge cases
+  (refresh tokens expired/revoked, refresh races, …). The `id_token` is
+  no longer included as `id_token_hint` on logout for the same reason —
+  modern providers accept `client_id` + `post_logout_redirect_uri`.
+
+### Changed
+
+- Session structure: `request.session["oidc"]["user"]` now holds the
+  identity claims; `id_token`, `access_token`, `refresh_token` and
+  `expires_at` are no longer stored. Active v0.8.0/0.8.1 sessions will
+  be invalidated on upgrade and users will need to sign in once.
+
 ## [0.8.1] - 2026-05-08
 
 ### Fixed
@@ -325,7 +352,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Test suite (41 tests) covering parser, formatting helpers, and HTTP
   routes via FastAPI's `TestClient`.
 
-[Unreleased]: https://github.com/Upellift99/ovispect/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/Upellift99/ovispect/compare/v0.8.2...HEAD
+[0.8.2]: https://github.com/Upellift99/ovispect/releases/tag/v0.8.2
+[0.8.1]: https://github.com/Upellift99/ovispect/releases/tag/v0.8.1
 [0.8.0]: https://github.com/Upellift99/ovispect/releases/tag/v0.8.0
 [0.7.0]: https://github.com/Upellift99/ovispect/releases/tag/v0.7.0
 [0.6.0]: https://github.com/Upellift99/ovispect/releases/tag/v0.6.0
