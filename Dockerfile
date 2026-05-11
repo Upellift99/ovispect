@@ -8,7 +8,7 @@ ARG PYTHON_VERSION=3.12-alpine
 ARG SKIP_GEOIP=
 
 # --- GeoIP country DB (db-ip.com Lite, CC-BY-4.0) -----------------------
-FROM alpine:3.19 AS geoip
+FROM alpine:3.23 AS geoip
 ARG SKIP_GEOIP
 WORKDIR /geoip
 # hadolint ignore=DL3018
