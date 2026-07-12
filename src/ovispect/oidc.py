@@ -470,6 +470,9 @@ def require_oidc_auth_factory(
     refresh tokens or run a silent renewal on every request.
     """
 
+    # Deliberately `async` despite awaiting nothing: FastAPI runs a sync
+    # dependency in a threadpool, so a plain `def` would add a thread hop to
+    # every authenticated request for what is only an in-memory session read.
     async def _require(request: Request) -> dict[str, Any]:
         payload = get_session(request)
         if payload is None:
