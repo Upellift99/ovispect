@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.6] - 2026-07-12
+
+### Security
+
+- The `next` redirect parameter now rejects backslashes. Browsers
+  normalise `\` to `/` per the WHATWG URL spec, so a value like
+  `/\evil.com` was treated as the protocol-relative `//evil.com` and
+  slipped past the `is_safe_next` guard, allowing an open redirect off
+  the dashboard after login. Regression tests cover the `/\`, `/\/` and
+  `\\` vectors.
+
+### Changed
+
+- The client details drawer is now a native `<dialog>` (opened with
+  `showModal()`) instead of a `div[role="dialog"]` toggled by a class, so
+  the focus trap, the inert background and Escape-to-close come from the
+  browser. Behaviour is otherwise unchanged; the slide-out animation is
+  preserved. First e2e coverage for the drawer was added.
+- The font-size selector is a native `<fieldset>` rather than a
+  `div[role="group"]`, for the same accessibility reason.
+
+### Fixed
+
+- Internal cleanups surfaced by SonarQube with no behaviour change:
+  reduced the cognitive complexity of the app factory, the OIDC route
+  wiring and the webhook poll loop; removed redundant exception classes
+  and unused parameters; documented the OIDC `/login` 500 response; and
+  made the login/error button backgrounds opaque (pixel-identical, but
+  now contrast-checkable).
+
 ## [0.8.5] - 2026-05-09
 
 ### Changed
@@ -394,7 +424,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Test suite (41 tests) covering parser, formatting helpers, and HTTP
   routes via FastAPI's `TestClient`.
 
-[Unreleased]: https://github.com/Upellift99/ovispect/compare/v0.8.5...HEAD
+[Unreleased]: https://github.com/Upellift99/ovispect/compare/v0.8.6...HEAD
+[0.8.6]: https://github.com/Upellift99/ovispect/releases/tag/v0.8.6
 [0.8.5]: https://github.com/Upellift99/ovispect/releases/tag/v0.8.5
 [0.8.4]: https://github.com/Upellift99/ovispect/releases/tag/v0.8.4
 [0.8.3]: https://github.com/Upellift99/ovispect/releases/tag/v0.8.3
