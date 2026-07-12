@@ -5,6 +5,11 @@ on:
     branches: [main]
   pull_request:
 
+# The scan publishes to an external SonarQube server, not to GitHub, so the
+# job only needs to read the repository contents.
+permissions:
+  contents: read
+
 jobs:
   sonarqube:
     name: Analyze
