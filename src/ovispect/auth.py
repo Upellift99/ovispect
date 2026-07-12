@@ -79,11 +79,16 @@ def is_safe_next(value: str | None) -> bool:
     """Validate the ``next`` query/form parameter to prevent open redirects.
 
     Only accept paths that start with a single ``/`` — no scheme, no host,
-    no protocol-relative ``//evil.com``.
+    no protocol-relative ``//evil.com``. Backslashes are rejected outright:
+    browsers normalise ``\\`` to ``/`` per the WHATWG URL spec, so a
+    ``Location: /\\evil.com`` is treated as ``//evil.com`` and would redirect
+    off-site.
     """
     if not value:
         return False
     if not value.startswith("/"):
+        return False
+    if "\\" in value:
         return False
     return not value.startswith("//")
 
