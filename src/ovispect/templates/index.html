@@ -32,6 +32,10 @@
             border: 1px solid #262626;
             border-radius: 4px;
             overflow: hidden;
+            /* Neutralise the UA <fieldset> chrome. */
+            margin: 0;
+            padding: 0;
+            min-inline-size: 0;
         }
         .fs-btn {
             background: transparent;
@@ -185,9 +189,19 @@
         }
         .search-clear.hidden { display: none; }
 
-        /* Drawer (client details). */
-        .drawer-root { position: fixed; inset: 0; z-index: 50; }
-        .drawer-root.hidden { display: none; }
+        /* Drawer (client details). A native <dialog>, so the UA gives us the
+           focus trap, the inert background and Escape for free — hence the
+           reset of its default chrome (border/padding/size/background). */
+        .drawer-root {
+            position: fixed; inset: 0; z-index: 50;
+            margin: 0; padding: 0; border: 0;
+            max-width: none; max-height: none;
+            width: auto; height: auto;
+            background: transparent;
+            color: inherit;
+        }
+        /* Our own backdrop element does the dimming; hide the UA one. */
+        .drawer-root::backdrop { background: transparent; }
         .drawer-backdrop {
             position: absolute; inset: 0;
             background-color: rgba(0, 0, 0, 0.55);
@@ -385,11 +399,11 @@
                     <span class="hidden sm:inline text-neutral-400 uppercase tracking-wider text-[10px]">last fetch</span>
                     <span id="last-fetch" class="text-neutral-100">{{ fetched_at_local }}</span>
                 </div>
-                <div class="fs-group" role="group" aria-label="Font size">
+                <fieldset class="fs-group" aria-label="Font size">
                     <button type="button" class="fs-btn" data-fontsize="s" aria-pressed="false" title="Small">S</button>
                     <button type="button" class="fs-btn" data-fontsize="m" aria-pressed="true" title="Medium">M</button>
                     <button type="button" class="fs-btn" data-fontsize="l" aria-pressed="false" title="Large">L</button>
-                </div>
+                </fieldset>
                 {% if username %}
                 <span class="hidden sm:inline-block text-[10px] uppercase tracking-[0.14em] text-neutral-400" title="Signed-in user">
                     <span class="text-neutral-600">user</span>
@@ -507,7 +521,7 @@
 
 </div>
 
-<div id="client-drawer" class="drawer-root hidden" role="dialog" aria-modal="true" aria-labelledby="drawer-title">
+<dialog id="client-drawer" class="drawer-root" aria-labelledby="drawer-title">
     <div class="drawer-backdrop" id="drawer-backdrop" aria-hidden="true"></div>
     <aside class="drawer-panel">
         <div class="drawer-header">
@@ -518,7 +532,7 @@
             <dl id="drawer-fields" class="drawer-fields"></dl>
         </div>
     </aside>
-</div>
+</dialog>
 
 <script>
 (function () {
@@ -852,7 +866,7 @@
         if (!c) return;
         drawerKey = rowKey;
         renderDrawerFields(c, !!c._isLeaving);
-        drawer.classList.remove('hidden');
+        drawer.showModal();
         // Force reflow so the transition kicks in.
         void drawer.offsetWidth;
         drawer.classList.add('is-open');
@@ -860,11 +874,18 @@
     }
 
     function closeDrawer() {
+        if (!drawer.open) return;
         drawerKey = null;
         drawer.classList.remove('is-open');
-        // Wait for the transition before fully hiding.
-        setTimeout(() => drawer.classList.add('hidden'), 220);
+        // Wait for the slide-out transition before releasing the dialog.
+        setTimeout(() => drawer.close(), 220);
     }
+
+    // Escape reaches the dialog first; cancel it so the drawer still animates out.
+    drawer.addEventListener('cancel', (e) => {
+        e.preventDefault();
+        closeDrawer();
+    });
 
     tbody.addEventListener('click', (e) => {
         const tr = e.target.closest('tr[data-row-key]');
@@ -878,10 +899,8 @@
 
     document.addEventListener('keydown', (e) => {
         if (e.key !== 'Escape') return;
-        if (!drawer.classList.contains('hidden')) {
-            closeDrawer();
-            return;
-        }
+        // The drawer is a modal <dialog> and consumes Escape itself (see `cancel`).
+        if (drawer.open) return;
         if (document.activeElement === searchInput && searchInput.value !== '') {
             e.preventDefault();
             searchClear.click();

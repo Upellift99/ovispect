@@ -12,7 +12,7 @@ from __future__ import annotations
 import socket
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
 
 import pytest
@@ -20,7 +20,7 @@ import uvicorn
 
 from ovispect import app as app_module
 from ovispect.config import Settings
-from ovispect.ovpn import StatusSnapshot
+from ovispect.ovpn import Client, StatusSnapshot
 
 
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
@@ -40,6 +40,32 @@ def _empty_snapshot(*_args: object, **_kwargs: object) -> StatusSnapshot:
     return StatusSnapshot(fetched_at=datetime.now(tz=UTC), clients=[])
 
 
+DRAWER_CLIENT_CN = "alice"
+
+
+def _one_client_snapshot(*_args: object, **_kwargs: object) -> StatusSnapshot:
+    """A snapshot with a single client, so the table has a row to click."""
+    return StatusSnapshot(
+        fetched_at=datetime.now(tz=UTC),
+        clients=[
+            Client(
+                common_name=DRAWER_CLIENT_CN,
+                real_address="203.0.113.7:1194",
+                virtual_address="10.8.0.2",
+                virtual_ipv6_address="",
+                bytes_received=1024,
+                bytes_sent=2048,
+                connected_since="2026-01-01 00:00:00",
+                connected_since_t=int(datetime.now(tz=UTC).timestamp()) - 60,
+                username="alice",
+                client_id="1",
+                peer_id="0",
+                data_channel_cipher="AES-256-GCM",
+            )
+        ],
+    )
+
+
 class _ThreadedServer(uvicorn.Server):
     """uvicorn.Server variant that skips signal handlers (non-main thread)."""
 
@@ -47,9 +73,8 @@ class _ThreadedServer(uvicorn.Server):
         return None
 
 
-@pytest.fixture(scope="session")
-def live_server() -> Iterator[str]:
-    """Boot uvicorn in a daemon thread and yield its base URL."""
+def _serve(stub: Callable[..., StatusSnapshot]) -> Iterator[str]:
+    """Boot uvicorn in a daemon thread with ``fetch_status`` stubbed."""
     settings = Settings(
         openvpn_host="127.0.0.1",
         openvpn_port=1,  # nothing listens here; fetch_status is stubbed anyway
@@ -60,7 +85,7 @@ def live_server() -> Iterator[str]:
     application = app_module.create_app(settings)
 
     original_fetch = app_module.fetch_status
-    app_module.fetch_status = _empty_snapshot  # type: ignore[assignment]
+    app_module.fetch_status = stub  # type: ignore[assignment]
 
     port = _free_port()
     config = uvicorn.Config(
@@ -93,3 +118,15 @@ def live_server() -> Iterator[str]:
         server.should_exit = True
         thread.join(timeout=5)
         app_module.fetch_status = original_fetch  # type: ignore[assignment]
+
+
+@pytest.fixture(scope="session")
+def live_server() -> Iterator[str]:
+    """Dashboard with no connected client."""
+    yield from _serve(_empty_snapshot)
+
+
+@pytest.fixture(scope="session")
+def live_server_with_clients() -> Iterator[str]:
+    """Dashboard with one connected client, so a row can be clicked open."""
+    yield from _serve(_one_client_snapshot)
