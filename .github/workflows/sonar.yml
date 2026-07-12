@@ -1,0 +1,38 @@
+name: SonarQube
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  sonarqube:
+    name: Analyze
+    runs-on: ubuntu-latest
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Shallow clones should be disabled for a better relevancy of analysis.
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install -e ".[dev]"
+      - name: Test with coverage
+        # e2e (Playwright) sont exclus par défaut via addopts (-m 'not e2e').
+        run: pytest -q --cov=ovispect --cov-report=xml
+      # Skip the scan when SONAR_TOKEN is unavailable (e.g. Dependabot or fork
+      # PRs cannot access repository secrets), so the job stays green instead of
+      # failing on an empty token.
+      - uses: SonarSource/sonarqube-scan-action@v8
+        if: ${{ env.SONAR_TOKEN != '' }}
+      # If you wish to fail your job when the Quality Gate is red, uncomment the
+      # following lines. This would typically be used to fail a deployment.
+      # - uses: SonarSource/sonarqube-quality-gate-action@v1
+      #   timeout-minutes: 5
+      #   env:
+      #     SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

@@ -58,7 +58,8 @@ Thumbs.db
 !docs/.gitkeep
 
 # Local agent / tooling artefacts
-.claude/
+# .claude/ est suivi (commandes partagées) ; settings.local.json reste ignoré
+# via le gitignore global ~/.config/git/ignore (**/.claude/settings.local.json)
 .qodo/
 
 # Build cache (Tailwind CLI binary, etc.)

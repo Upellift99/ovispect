@@ -3,7 +3,9 @@
     "github": {
       "toolsets": "context,repos,actions,orgs,users"
     },
-    "sonarqube": false,
+    "sonarqube": {
+      "project_key": "Upellift99_ovispect_eb1d2582-6a12-4f42-b76e-af6ed00a10f7"
+    },
     "glitchtip": false
   },
   "bypass_permissions": true
