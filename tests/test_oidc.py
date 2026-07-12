@@ -510,11 +510,7 @@ def test_oidc_client_logout_url_returns_none_without_endpoint() -> None:
     )
     client = OIDCClient(settings, doc)
 
-    class _FakeRequest:
-        def __init__(self) -> None:
-            self.session: dict[str, Any] = {}
-
-    assert client.logout_url(_FakeRequest(), post_logout_redirect_uri=None) is None  # type: ignore[arg-type]
+    assert client.logout_url(post_logout_redirect_uri=None) is None
 
 
 def test_oidc_error_carries_code() -> None:

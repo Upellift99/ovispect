@@ -363,7 +363,6 @@ class OIDCClient:
 
     def logout_url(
         self,
-        request: Request,
         *,
         post_logout_redirect_uri: str | None = None,
     ) -> str | None:
@@ -461,7 +460,6 @@ def clear_session(request: Request) -> None:
 
 def require_oidc_auth_factory(
     settings: Settings,
-    client: OIDCClient,
 ) -> Callable[[Request], Awaitable[dict[str, Any]]]:
     """Build the FastAPI dependency that enforces OIDC authentication.
 

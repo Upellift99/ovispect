@@ -298,7 +298,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:  # noqa: PLR0915
     require_auth: Any
     if mode == "oidc":
         assert oidc_client is not None
-        require_auth = require_oidc_auth_factory(cfg, oidc_client)
+        require_auth = require_oidc_auth_factory(cfg)
     else:
         require_auth = require_auth_factory(cfg)
     rate_limiter = LoginRateLimiter()
@@ -483,7 +483,6 @@ def _wire_oidc_routes(
     @application.post("/logout")
     async def logout(request: Request) -> Response:
         end_session = client.logout_url(
-            request,
             post_logout_redirect_uri=(
                 str(cfg.oidc_logout_redirect_uri) if cfg.oidc_logout_redirect_uri else None
             ),
