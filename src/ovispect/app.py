@@ -65,6 +65,8 @@ _TEMPLATES_DIR = Path(__file__).parent / "templates"
 _STATIC_DIR = Path(__file__).parent / "static"
 templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
 
+_LOGIN_TEMPLATE = "login.html"
+
 
 def _resolve_timezone(name: str) -> ZoneInfo:
     try:
@@ -369,7 +371,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:  # noqa: PLR0915
             return RedirectResponse(url="/", status_code=303)
         return templates.TemplateResponse(
             request,
-            "login.html",
+            _LOGIN_TEMPLATE,
             {
                 "site_name": cfg.site_name,
                 "version": __version__,
@@ -392,7 +394,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:  # noqa: PLR0915
             minutes = max(int(retry.total_seconds() // 60) + 1, 1) if retry else 5
             return templates.TemplateResponse(
                 request,
-                "login.html",
+                _LOGIN_TEMPLATE,
                 {
                     "site_name": cfg.site_name,
                     "version": __version__,
@@ -416,7 +418,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:  # noqa: PLR0915
         rate_limiter.register_failure(ip)
         return templates.TemplateResponse(
             request,
-            "login.html",
+            _LOGIN_TEMPLATE,
             {
                 "site_name": cfg.site_name,
                 "version": __version__,
@@ -441,7 +443,10 @@ def _wire_oidc_routes(
 ) -> None:
     """Attach /login, /oidc/callback and /logout for OIDC mode."""
 
-    @application.get("/login")
+    @application.get(
+        "/login",
+        responses={500: {"description": "Session middleware unavailable in OIDC mode."}},
+    )
     async def login(request: Request, next: str | None = None) -> Response:
         if oidc_module.get_session(request) is not None:
             return RedirectResponse(url="/", status_code=303)
@@ -504,7 +509,14 @@ def _render_login_error(
     description: str | None = None,
 ) -> Response:
     request_id = secrets.token_hex(4)
-    logger.info("oidc login error rendered (reason=%s, request_id=%s)", reason, request_id)
+    # The provider's description stays server-side: the template only surfaces
+    # request_id, so untrusted provider text is never reflected back to the user.
+    logger.info(
+        "oidc login error rendered (reason=%s, request_id=%s, description=%s)",
+        reason,
+        request_id,
+        description,
+    )
     return templates.TemplateResponse(
         request,
         "login_error.html",
