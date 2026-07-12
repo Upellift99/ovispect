@@ -1,0 +1,10 @@
+{
+  "mcps": {
+    "github": {
+      "toolsets": "context,repos,actions,orgs,users"
+    },
+    "sonarqube": false,
+    "glitchtip": false
+  },
+  "bypass_permissions": true
+}
