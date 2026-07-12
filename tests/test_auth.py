@@ -61,6 +61,10 @@ def test_is_auth_enabled_true_for_configured_hash() -> None:
         ("relative-path", False),
         ("//evil.com/path", False),
         ("https://evil.com", False),
+        # Browsers normalise "\" to "/", so these are protocol-relative too.
+        ("/\\evil.com", False),
+        ("/\\/evil.com", False),
+        ("\\\\evil.com", False),
     ],
 )
 def test_is_safe_next(value: str | None, expected: bool) -> None:

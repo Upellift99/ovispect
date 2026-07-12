@@ -66,6 +66,31 @@ def test_font_size_selector_persists_across_reload(live_server: str, page: Page)
     expect(page.locator('.fs-btn[data-fontsize="l"]')).to_have_attribute("aria-pressed", "true")
 
 
+def test_client_drawer_opens_and_closes(live_server_with_clients: str, page: Page) -> None:
+    """The details drawer is a native <dialog>: clicking a row opens it modally,
+    and Escape or a backdrop click animates it back out."""
+    page.goto(live_server_with_clients)
+
+    drawer = page.locator("#client-drawer")
+    expect(drawer).to_be_hidden()
+
+    page.locator("tr[data-row-key]").first.click()
+    expect(drawer).to_be_visible()
+    # showModal() — not just a class toggle — so the dialog is genuinely open.
+    assert drawer.evaluate("d => d.open") is True
+    expect(page.locator("#drawer-title")).to_have_text("alice")
+
+    page.keyboard.press("Escape")
+    expect(drawer).to_be_hidden()
+    assert drawer.evaluate("d => d.open") is False
+
+    # Re-open, then dismiss by clicking the backdrop.
+    page.locator("tr[data-row-key]").first.click()
+    expect(drawer).to_be_visible()
+    page.locator("#drawer-backdrop").click(position={"x": 5, "y": 5})
+    expect(drawer).to_be_hidden()
+
+
 def test_dashboard_collapses_secondary_columns_on_mobile(live_server: str, page: Page) -> None:
     """Below Tailwind's `sm` breakpoint (640 px) the table collapses into
     a card-style grid: the column headers go away entirely (each row is
