@@ -173,7 +173,7 @@ def query_management(
             return text[:end_idx] if end_idx != -1 else text
     except ManagementError:
         raise
-    except (TimeoutError, ConnectionRefusedError, OSError) as exc:
+    except OSError as exc:
         raise ManagementError(f"failed to query management interface: {exc}") from exc
 
 
