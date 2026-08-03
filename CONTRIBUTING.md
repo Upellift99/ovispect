@@ -99,9 +99,42 @@ trailer in the body.
 
 - Keep PRs focused. One concern per PR makes review faster and revert safer.
 - Update tests for any behavior change.
-- Update the relevant section of the README and `CHANGELOG.md` when applicable.
+- Update the relevant section of the README when applicable. Do **not** edit
+  `CHANGELOG.md` by hand: Release Please regenerates its top section from the
+  commit history (see below). Put the effort into your commit message instead —
+  it is what ends up in the changelog.
 - All CI checks must be green before review.
 - A maintainer will review every PR; we do not allow self-merges to `main`.
+
+## Releasing
+
+Maintainers only. The version is bumped by
+[Release Please](https://github.com/googleapis/release-please), which watches
+`main` and keeps a release pull request up to date.
+
+1. Merge whatever you want to ship into `main`. Release Please opens (or
+   updates) a `chore(release): X.Y.Z` PR, bumping `pyproject.toml` and drafting
+   a `CHANGELOG.md` entry from the `feat:` and `fix:` commits. Every other
+   commit type is deliberately hidden, so the draft stays short.
+2. **Rewrite that draft before merging.** The generated bullets are commit
+   subjects; the changelog this project keeps explains *why* a change matters
+   and what it means for an operator. Move entries under the right Keep a
+   Changelog heading (`Security` in particular is never inferred), and match
+   the surrounding style.
+3. Merge the release PR.
+4. Push the tag — this is the step that publishes:
+
+   ```bash
+   git switch main && git pull
+   git tag -a v0.9.0 -m "v0.9.0" && git push origin v0.9.0
+   ```
+
+   `release.yml` then builds the multi-arch image, pushes it to GHCR, and
+   creates the GitHub Release with the notes taken from `CHANGELOG.md`.
+
+Release Please intentionally does not tag (`skip-github-release: true`).
+Tagging stays a deliberate act, and it keeps the tag push as the single
+trigger of the publishing pipeline.
 
 ## Reporting issues
 

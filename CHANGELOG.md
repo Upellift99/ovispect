@@ -5,8 +5,6 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
-
 ## [0.8.7] - 2026-08-03
 
 ### Fixed
@@ -450,7 +448,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Test suite (41 tests) covering parser, formatting helpers, and HTTP
   routes via FastAPI's `TestClient`.
 
-[Unreleased]: https://github.com/Upellift99/ovispect/compare/v0.8.7...HEAD
 [0.8.7]: https://github.com/Upellift99/ovispect/releases/tag/v0.8.7
 [0.8.6]: https://github.com/Upellift99/ovispect/releases/tag/v0.8.6
 [0.8.5]: https://github.com/Upellift99/ovispect/releases/tag/v0.8.5
