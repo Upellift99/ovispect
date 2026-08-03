@@ -60,7 +60,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 # hadolint ignore=DL3018
 RUN apk add --no-cache wget tini \
- && addgroup -S ovispect \
+ && addgroup -S -g 10001 ovispect \
  && adduser -S -G ovispect -u 10001 -H -h /app ovispect
 
 WORKDIR /app
@@ -68,12 +68,13 @@ WORKDIR /app
 COPY --from=builder /opt/venv /opt/venv
 COPY --from=geoip /geoip/dbip-country-lite.csv.gz /opt/geo/dbip-country-lite.csv.gz
 
-USER ovispect:ovispect
+# Numeric uid:gid (DL3066) so the host can resolve the user without /etc/passwd.
+USER 10001:10001
 
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD wget -q -O - "http://127.0.0.1:${BIND_PORT}/healthz" || exit 1
+    CMD ["/bin/sh", "-c", "wget -q -O - \"http://127.0.0.1:${BIND_PORT}/healthz\" || exit 1"]
 
 ENTRYPOINT ["/sbin/tini", "--"]
 CMD ["python", "-m", "ovispect"]

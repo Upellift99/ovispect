@@ -14,7 +14,9 @@ OUT="dbip-country-lite.csv.gz"
 YEAR=$(date -u +%Y)
 MONTH_RAW=$(date -u +%m)
 # Strip leading zero so arithmetic doesn't treat "08"/"09" as octal in dash/ash.
-MONTH=$(printf '%d' "$MONTH_RAW")
+# Must be parameter expansion: busybox printf '%d' parses with base 0, so it
+# rejects "08"/"09" ("invalid number") instead of stripping the zero.
+MONTH=${MONTH_RAW#0}
 
 for offset in 0 1 2 3; do
     new_month=$((MONTH - offset))
