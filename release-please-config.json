@@ -5,7 +5,7 @@
   "include-component-in-tag": false,
   "pull-request-title-pattern": "chore(release): ${version}",
   "changelog-path": "CHANGELOG.md",
-  "separate-pull-requests": false,
+  "separate-pull-requests": true,
   "changelog-sections": [
     { "type": "feat", "section": "Added" },
     { "type": "fix", "section": "Fixed" },
