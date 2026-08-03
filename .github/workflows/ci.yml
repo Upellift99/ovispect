@@ -112,7 +112,10 @@ jobs:
   build:
     name: Build container image (smoke)
     runs-on: ubuntu-latest
-    needs: [lint, types, test, dockerfile, e2e]
+    # Volontairement sans `needs:`. Quand ce job était gaté par les autres, le
+    # moindre échec de lint le faisait *skipper* — et un job skippé se lit comme
+    # un job vert dans le rollup de la PR. C'est ce qui a laissé le build cassé
+    # tout le mois d'août sans que la CI ne rougisse (cf. #17).
     steps:
       - uses: actions/checkout@v7
       - uses: docker/setup-buildx-action@v4
@@ -121,6 +124,45 @@ jobs:
         with:
           context: .
           push: false
+          # Charge l'image dans le daemon local pour le smoke-test ci-dessous.
+          load: true
           tags: ovispect:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - name: Smoke-test (démarrage, uid non-root, HEALTHCHECK)
+        run: |
+          set -euo pipefail
+
+          uid=$(docker run --rm --entrypoint /bin/sh ovispect:ci -c 'id -u')
+          gid=$(docker run --rm --entrypoint /bin/sh ovispect:ci -c 'id -g')
+          echo "uid=$uid gid=$gid"
+          if [ "$uid" != "10001" ] || [ "$gid" != "10001" ]; then
+            echo "::error::l'image doit tourner en 10001:10001, obtenu $uid:$gid"
+            exit 1
+          fi
+
+          docker run -d --name ovispect-smoke \
+            -e OPENVPN_HOST=127.0.0.1 \
+            -e OPENVPN_PORT=7505 \
+            ovispect:ci
+
+          # Le HEALTHCHECK passe healthy en ~6 s ; on laisse 120 s de marge.
+          for _ in $(seq 1 60); do
+            if [ "$(docker inspect -f '{{.State.Running}}' ovispect-smoke)" != "true" ]; then
+              code=$(docker inspect -f '{{.State.ExitCode}}' ovispect-smoke)
+              echo "::error::le conteneur s'est arrêté (exit $code)"
+              docker logs ovispect-smoke
+              exit 1
+            fi
+            status=$(docker inspect -f '{{.State.Health.Status}}' ovispect-smoke)
+            if [ "$status" = "healthy" ]; then
+              echo "conteneur healthy"
+              exit 0
+            fi
+            sleep 2
+          done
+
+          echo "::error::le conteneur n'est jamais devenu healthy (120 s)"
+          docker inspect -f '{{json .State.Health}}' ovispect-smoke
+          docker logs ovispect-smoke
+          exit 1
