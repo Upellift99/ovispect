@@ -1,0 +1,28 @@
+name: Release Please
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    name: Maintain the release PR
+    runs-on: ubuntu-latest
+    steps:
+      - uses: googleapis/release-please-action@v5
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+          # PR uniquement : release-please prépare le bump et le brouillon de
+          # CHANGELOG, mais ne taggue pas. Le tag reste poussé à la main, ce qui
+          # garde `release.yml` (build multi-arch, GHCR, GitHub Release avec les
+          # notes rédigées) comme unique chemin de publication.
+          #
+          # Cet input est bien ce qui pilote le comportement : l'action teste
+          # `if (!inputs.skipGitHubRelease)`, la clé équivalente du fichier de
+          # config n'est pas lue ici.
+          skip-github-release: true
