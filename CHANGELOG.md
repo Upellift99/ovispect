@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.7] - 2026-08-03
+
+### Fixed
+
+- The container image failed to build during August and September. The
+  GeoIP fetch script derived the current month with `printf '%d' "$(date
+  -u +%m)"`, which was meant to strip the leading zero — but busybox
+  `printf` parses with base 0 and *rejects* `08`/`09` as invalid octal
+  rather than normalising them, aborting the build with `sh: invalid
+  number '08'`. July went unnoticed because `07` happens to be valid
+  octal. The month is now derived with a `${MONTH#0}` parameter
+  expansion, verified across all twelve months.
+
+### Changed
+
+- The runtime user is declared as the numeric `USER 10001:10001` instead
+  of `ovispect:ovispect`, so a host can resolve it without reading the
+  image's `/etc/passwd`. Its group is now created with an explicit
+  `-g 10001`: the GID therefore changes from the auto-assigned `101` to
+  `10001`. The UID is unchanged, and no documented deployment mounts a
+  volume into the container, so this is only observable if you bind-mount
+  host paths and rely on group ownership.
+- The `HEALTHCHECK` command uses JSON notation (`["/bin/sh", "-c", …]`).
+  The probe itself is unchanged — it still expands `${BIND_PORT}` and
+  exits 1 on failure.
+
 ## [0.8.6] - 2026-07-12
 
 ### Security
@@ -424,7 +450,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Test suite (41 tests) covering parser, formatting helpers, and HTTP
   routes via FastAPI's `TestClient`.
 
-[Unreleased]: https://github.com/Upellift99/ovispect/compare/v0.8.6...HEAD
+[Unreleased]: https://github.com/Upellift99/ovispect/compare/v0.8.7...HEAD
+[0.8.7]: https://github.com/Upellift99/ovispect/releases/tag/v0.8.7
 [0.8.6]: https://github.com/Upellift99/ovispect/releases/tag/v0.8.6
 [0.8.5]: https://github.com/Upellift99/ovispect/releases/tag/v0.8.5
 [0.8.4]: https://github.com/Upellift99/ovispect/releases/tag/v0.8.4
