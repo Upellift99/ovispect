@@ -13,6 +13,13 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# docker/build-push-action uploads a `.dockerbuild` build summary as a
+# workflow artifact on every run. Nobody reads them, and they count against
+# the 0.5 GB Actions storage quota: ~1000 of them had piled up across the
+# personal repos by 2026-08-24, one per build, kept for the default 90 days.
+env:
+  DOCKER_BUILD_SUMMARY: false
+
 jobs:
   lint:
     name: Lint (ruff)

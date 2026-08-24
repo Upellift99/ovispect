@@ -15,6 +15,11 @@ env:
   REGISTRY: ghcr.io
   # Lowercased on purpose: GHCR rejects uppercase paths.
   IMAGE_NAME: upellift99/ovispect
+  # docker/build-push-action uploads a `.dockerbuild` build summary as a
+  # workflow artifact on every run. Nobody reads them, and they count against
+  # the 0.5 GB Actions storage quota: ~1000 of them had piled up across the
+  # personal repos by 2026-08-24, one per build, kept for the default 90 days.
+  DOCKER_BUILD_SUMMARY: false
 
 jobs:
   release:
