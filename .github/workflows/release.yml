@@ -1,9 +1,26 @@
 name: Release
 
+# Two entry points, one pipeline:
+#   - `workflow_call` from release-please.yml, once a release PR is merged.
+#     This is the normal path: the tag and the GitHub Release already exist,
+#     this workflow builds and pushes the image for that tag.
+#   - `push` of a `v*.*.*` tag by hand — kept for an out-of-band release or a
+#     rebuild. In that case the GitHub Release is created here, with the notes
+#     extracted from CHANGELOG.md.
 on:
   push:
     tags:
       - "v*.*.*"
+  workflow_call:
+    inputs:
+      tag:
+        description: "Git tag to build and publish (e.g. v0.9.0)"
+        type: string
+        required: true
+      create_release:
+        description: "Also create the GitHub Release from CHANGELOG.md"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -15,6 +32,9 @@ env:
   REGISTRY: ghcr.io
   # Lowercased on purpose: GHCR rejects uppercase paths.
   IMAGE_NAME: upellift99/ovispect
+  # The tag being released. On a tag push `github.ref_name` is the tag; when
+  # called from release-please the caller's ref is `main`, so the input wins.
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
   # docker/build-push-action uploads a `.dockerbuild` build summary as a
   # workflow artifact on every run. Nobody reads them, and they count against
   # the 0.5 GB Actions storage quota: ~1000 of them had piled up across the
@@ -28,6 +48,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.tag || github.ref_name }}
           fetch-depth: 0
 
       - name: Set up QEMU
@@ -48,10 +69,12 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          # `value=` because, when called from release-please, the workflow's
+          # own ref is `main` and the semver patterns would produce nothing.
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
+            type=semver,pattern={{version}},value=${{ env.RELEASE_TAG }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ env.RELEASE_TAG }}
+            type=semver,pattern={{major}},value=${{ env.RELEASE_TAG }}
             type=raw,value=latest
 
       - name: Build and push (multi-arch)
@@ -68,11 +91,15 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # `inputs.tag` is empty only on a direct tag push. (`github.event_name`
+      # would not do: when called from release-please it is the caller's
+      # event, i.e. the push to main.)
       - name: Extract release notes from CHANGELOG
         id: changelog
+        if: ${{ inputs.tag == '' || inputs.create_release }}
         run: |
           set -euo pipefail
-          tag="${GITHUB_REF#refs/tags/v}"
+          tag="${RELEASE_TAG#v}"
           notes=$(awk -v ver="$tag" '
             $0 ~ "^## \\[" ver "\\]" { flag=1; next }
             flag && /^## \[/ { exit }
@@ -88,9 +115,11 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release
+        if: ${{ inputs.tag == '' || inputs.create_release }}
         uses: softprops/action-gh-release@v3
         with:
-          name: ${{ github.ref_name }}
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: ${{ env.RELEASE_TAG }}
           body: ${{ steps.changelog.outputs.notes }}
           generate_release_notes: false
-          prerelease: ${{ contains(github.ref_name, '-') }}
+          prerelease: ${{ contains(env.RELEASE_TAG, '-') }}

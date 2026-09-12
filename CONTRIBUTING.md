@@ -121,20 +121,17 @@ Maintainers only. The version is bumped by
    and what it means for an operator. Move entries under the right Keep a
    Changelog heading (`Security` in particular is never inferred), and match
    the surrounding style.
-3. Merge the release PR.
-4. Push the tag — this is the step that publishes:
+3. Merge the release PR. **That is the step that publishes.** Release Please
+   creates the `vX.Y.Z` tag and the GitHub Release (body = the changelog
+   section), then `release-please.yml` calls `release.yml`, which builds the
+   multi-arch image and pushes it to GHCR under `X.Y.Z`, `X.Y`, `X` and
+   `latest`. Nothing to type; watch the *Release Please* run on `main`.
 
-   ```bash
-   git switch main && git pull
-   git tag -a v0.9.0 -m "v0.9.0" && git push origin v0.9.0
-   ```
-
-   `release.yml` then builds the multi-arch image, pushes it to GHCR, and
-   creates the GitHub Release with the notes taken from `CHANGELOG.md`.
-
-Release Please intentionally does not tag (`skip-github-release: true`).
-Tagging stays a deliberate act, and it keeps the tag push as the single
-trigger of the publishing pipeline.
+The call is explicit rather than tag-triggered because the tag is pushed with
+`GITHUB_TOKEN`, and events produced by that token never start other
+workflows. `release.yml` also keeps its `on: push: tags` entry point for an
+out-of-band release or a rebuild: pushing a `v*.*.*` tag by hand builds the
+image and creates the GitHub Release from `CHANGELOG.md`.
 
 ## Reporting issues
 

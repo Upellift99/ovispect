@@ -10,19 +10,40 @@ permissions:
 
 jobs:
   release-please:
-    name: Maintain the release PR
+    name: Maintain the release PR, tag on merge
     runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
       - uses: googleapis/release-please-action@v5
+        id: release
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
-          # PR uniquement : release-please prépare le bump et le brouillon de
-          # CHANGELOG, mais ne taggue pas. Le tag reste poussé à la main, ce qui
-          # garde `release.yml` (build multi-arch, GHCR, GitHub Release avec les
-          # notes rédigées) comme unique chemin de publication.
+          # Fully automatic: on every push to main release-please maintains
+          # the release PR, and once that PR is merged it creates the tag and
+          # the GitHub Release (body = the CHANGELOG section it wrote).
           #
-          # Cet input est bien ce qui pilote le comportement : l'action teste
-          # `if (!inputs.skipGitHubRelease)`, la clé équivalente du fichier de
-          # config n'est pas lue ici.
-          skip-github-release: true
+          # The tag is pushed with GITHUB_TOKEN, and events produced by that
+          # token never start other workflows — so `release.yml`'s
+          # `on: push: tags` would NOT fire. The publish job below calls it
+          # explicitly instead, with the tag as input. No PAT needed.
+          #
+          # (`skip-github-release: true` used to keep the tag manual; it was
+          # forgotten after every release PR merge, so nothing shipped.)
+
+  publish:
+    name: Publish the release
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ needs.release-please.outputs.tag_name }}
+      # release-please already created the GitHub Release with the notes.
+      create_release: false
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+      attestations: write
