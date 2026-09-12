@@ -46,6 +46,11 @@ class FakeProvider:
 
     def __init__(self) -> None:
         self._routes: dict[tuple[str, str], tuple[int, Any, str | None]] = {}
+        self._failures: dict[tuple[str, str], Exception] = {}
+
+    def fail(self, method: str, url: str, exc: Exception) -> None:
+        """Make a route raise (e.g. ``httpx2.ConnectError``) instead of answering."""
+        self._failures[(method.upper(), url)] = exc
 
     def get(
         self, url: str, *, status: int = 200, json: Any = None, text: str | None = None
@@ -59,6 +64,8 @@ class FakeProvider:
 
     def handle(self, request: httpx2.Request) -> httpx2.Response:
         key = (request.method, str(request.url).split("?", 1)[0])
+        if key in self._failures:
+            raise self._failures[key]
         if key not in self._routes:
             return httpx2.Response(404, text=f"no fake route for {key[0]} {key[1]}")
         status, json, text = self._routes[key]
@@ -91,6 +98,37 @@ async def test_client_builders_hit_the_network_when_no_override(
         assert isinstance(sync_client, httpx2.Client)
     async with oidc_module._async_client(verify_ssl=True, timeout=1.0) as async_client:
         assert isinstance(async_client, httpx2.AsyncClient)
+
+
+def test_oidc_callback_token_endpoint_unreachable_renders_error(  # type: ignore[no-untyped-def]
+    oidc_app,
+) -> None:
+    """A transport error on the token endpoint is a clean 400, not a crash."""
+    application, _, provider = oidc_app
+    with TestClient(application, follow_redirects=False) as tc:
+        login = tc.get("/login")
+        state = parse_qs(urlparse(login.headers["location"]).query)["state"][0]
+        provider.fail(
+            "POST",
+            f"{ISSUER}/protocol/openid-connect/token",
+            httpx2.ConnectError("connection refused"),
+        )
+        response = tc.get("/oidc/callback", params={"code": "x", "state": state})
+    assert response.status_code == 400
+    assert "Authentication failed" in response.text
+
+
+async def test_jwks_unreachable_raises_oidc_error(  # type: ignore[no-untyped-def]
+    oidc_app,
+) -> None:
+    _, client, provider = oidc_app
+    provider.fail(
+        "GET",
+        f"{ISSUER}/protocol/openid-connect/certs",
+        httpx2.ConnectError("connection refused"),
+    )
+    with pytest.raises(OIDCError, match="jwks_unreachable"):
+        await client._get_jwks()
 
 
 def test_client_builders_use_the_override_when_set(provider: FakeProvider) -> None:

@@ -181,6 +181,31 @@ async def test_notifier_retries_on_5xx_then_succeeds(
     assert attempts["n"] == 2
 
 
+async def test_notifier_retries_on_transport_error_then_succeeds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A connection error counts as a failed attempt and is retried."""
+    attempts = {"n": 0}
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        attempts["n"] += 1
+        if attempts["n"] < 2:
+            raise httpx2.ConnectError("connection refused")
+        return httpx2.Response(200)
+
+    async def _no_sleep(_seconds: float) -> None:
+        return None
+
+    monkeypatch.setattr(asyncio, "sleep", _no_sleep)
+
+    transport = httpx2.MockTransport(handler)
+    async with httpx2.AsyncClient(transport=transport) as client:
+        notifier = WebhookNotifier(_settings(), http_client=client)
+        ok = await notifier.send(_event())
+        assert ok is True
+    assert attempts["n"] == 2
+
+
 async def test_notifier_does_not_retry_on_4xx() -> None:
     attempts = {"n": 0}
 
