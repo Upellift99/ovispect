@@ -36,6 +36,10 @@ dependencies = [
     # httpx2 is the maintained fork of httpx (which has had no release since
     # 2024-12). Starlette's TestClient prefers it as well.
     "httpx2>=2.3",
+    # JOSE (JWT verification, JWKS) for the OIDC flow. Imported directly by
+    # oidc.py; it used to reach us only as a transitive dependency of the
+    # never-imported authlib, which is why removing authlib exposed it.
+    "joserfc>=1.0",
 ]
 
 [project.optional-dependencies]
