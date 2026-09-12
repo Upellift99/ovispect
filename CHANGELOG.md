@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0](https://github.com/Upellift99/ovispect/compare/v0.8.7...v0.9.0) (2026-09-12)
+
+
+### Added
+
+* **deps:** migrate to httpx2, drop httpx, respx and authlib ([#27](https://github.com/Upellift99/ovispect/issues/27)) ([6f4748c](https://github.com/Upellift99/ovispect/commit/6f4748c21a74de96bfd9bc11a911d97471c33fcf))
+* **ui:** preset filter buttons via QUICK_FILTERS ([#24](https://github.com/Upellift99/ovispect/issues/24)) ([b857bdd](https://github.com/Upellift99/ovispect/commit/b857bdd370b512ae2c577eefdd5cc322a1431899))
+
 ## [0.8.7] - 2026-08-03
 
 ### Fixed
