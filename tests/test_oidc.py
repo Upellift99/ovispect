@@ -82,6 +82,25 @@ def provider(monkeypatch: pytest.MonkeyPatch) -> FakeProvider:
     return fake
 
 
+async def test_client_builders_hit_the_network_when_no_override(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Without the test seam, real clients are built with the verify flag."""
+    monkeypatch.setattr(oidc_module, "_transport_override", None)
+    with oidc_module._sync_client(verify_ssl=False, timeout=1.0) as sync_client:
+        assert isinstance(sync_client, httpx2.Client)
+    async with oidc_module._async_client(verify_ssl=True, timeout=1.0) as async_client:
+        assert isinstance(async_client, httpx2.AsyncClient)
+
+
+def test_client_builders_use_the_override_when_set(provider: FakeProvider) -> None:
+    """With the seam set, both clients are served by the fake provider."""
+    provider.get("https://idp.example/ping", status=204)
+    with oidc_module._sync_client(verify_ssl=True, timeout=1.0) as sync_client:
+        assert sync_client.get("https://idp.example/ping").status_code == 204
+        assert sync_client.get("https://idp.example/missing").status_code == 404
+
+
 def _discovery_payload() -> dict[str, Any]:
     return {
         "issuer": ISSUER,
