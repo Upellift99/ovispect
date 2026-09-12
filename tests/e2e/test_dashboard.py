@@ -121,3 +121,44 @@ def test_dashboard_collapses_secondary_columns_on_mobile(live_server: str, page:
     expect(connected).to_be_visible()
     expect(fs_group).to_be_visible()
     expect(sub_label).to_be_visible()
+
+
+def test_quick_filter_buttons_filter_rows_and_toggle(
+    live_server_quick_filters: str, page: Page
+) -> None:
+    """A QUICK_FILTERS button fills the search box, filters the table with
+    OR semantics, is highlighted while active, and clears on a second click."""
+    page.goto(live_server_quick_filters)
+    rows = page.locator("#clients-tbody tr[data-row-key]")
+    expect(rows).to_have_count(3)
+
+    workstations = page.locator('.qf-btn[data-needle="desktop|laptop"]')
+    servers = page.locator('.qf-btn[data-needle="web"]')
+    search = page.locator("#search-input")
+    expect(workstations).to_have_text("Workstations")
+    expect(workstations).to_have_attribute("aria-pressed", "false")
+
+    workstations.click()
+    expect(search).to_have_value("desktop|laptop")
+    expect(workstations).to_have_attribute("aria-pressed", "true")
+    expect(rows).to_have_count(2)
+    expect(page.locator("#clients-tbody")).to_contain_text("desktop6")
+    expect(page.locator("#clients-tbody")).to_contain_text("laptop7")
+    expect(page.locator("#clients-tbody")).not_to_contain_text("web31")
+
+    servers.click()
+    expect(search).to_have_value("web")
+    expect(workstations).to_have_attribute("aria-pressed", "false")
+    expect(servers).to_have_attribute("aria-pressed", "true")
+    expect(rows).to_have_count(1)
+    expect(page.locator("#clients-tbody")).to_contain_text("web31")
+
+    # Clicking the active button clears the filter.
+    servers.click()
+    expect(search).to_have_value("")
+    expect(servers).to_have_attribute("aria-pressed", "false")
+    expect(rows).to_have_count(3)
+
+    # Typing a needle by hand highlights the matching button too.
+    search.fill("web")
+    expect(servers).to_have_attribute("aria-pressed", "true")

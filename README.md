@@ -61,12 +61,32 @@ A drop-in `compose.example.yml` is provided in this repo.
 | `OPENVPN_PORT`                | (required)  | TCP port of the management interface                                        |
 | `OPENVPN_PASSWORD`            | (empty)     | Management password if `management-client-auth` is configured server-side   |
 | `SITE_NAME`                   | `OpenVPN`   | Name shown in the dashboard header                                          |
+| `QUICK_FILTERS`               | (empty)     | Preset filter buttons, `Label=needle;…` — see [Quick filters](#quick-filters) |
 | `REFRESH_SECONDS`             | `10`        | Auto-refresh interval (1–3600)                                              |
 | `TIMEZONE`                    | `UTC`       | IANA timezone for displayed timestamps (e.g. `Europe/Paris`)                |
 | `LOG_LEVEL`                   | `INFO`      | `DEBUG`, `INFO`, `WARNING`, `ERROR`, or `CRITICAL`                          |
 | `BIND_HOST`                   | `0.0.0.0`   | Address the HTTP server listens on inside the container                     |
 | `BIND_PORT`                   | `8000`      | Port the HTTP server listens on inside the container                        |
 | `MANAGEMENT_TIMEOUT_SECONDS`  | `5.0`       | Socket timeout when talking to the management interface                     |
+
+## Quick filters
+
+The search box filters the table live by common name, real address or
+virtual address. `QUICK_FILTERS` adds preset buttons under it, so a
+recurring search is one click away:
+
+```env
+QUICK_FILTERS=Desktops=desktop;Laptops=laptop;Servers=web|vps
+```
+
+- Entries are separated by `;`, each one is `Label=needle`. Without `=`,
+  the needle is also the label (`QUICK_FILTERS=desktop;laptop`).
+- A needle may hold several `|`-separated terms, matched as OR — this also
+  works when typed directly in the search box (`desktop|laptop`).
+- Clicking a button fills the search box with its needle; clicking the
+  active button clears it. The active filter is persisted in the browser
+  like the rest of the UI preferences.
+- At most 20 buttons; labels up to 40 characters.
 
 ## OpenVPN management interface setup
 
