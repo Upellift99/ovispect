@@ -136,7 +136,18 @@ minversion = "8.0"
 addopts = "-ra --strict-markers --strict-config -m 'not e2e'"
 testpaths = ["tests"]
 pythonpath = ["src"]
-filterwarnings = ["error"]
+filterwarnings = [
+    "error",
+    # TEMPORARY — anyio 4.15 (2026-09-02) deprecated the
+    # `anyio.abc.BlockingPortal` alias, which starlette's TestClient still
+    # imports at module load in the latest release (1.6.0, 2026-08-08).
+    # Starlette already fixed it on master (encode/starlette#3498,
+    # 2026-09-05); nothing published carries the fix yet. With "error"
+    # alone the warning aborts conftest import (exit code 4, zero tests
+    # run). Scoped to that one message. REMOVE at the first starlette
+    # release after 1.6.0.
+    "ignore:The anyio.abc.BlockingPortal alias is deprecated:DeprecationWarning",
+]
 asyncio_mode = "auto"
 markers = [
     "e2e: end-to-end Playwright tests (requires `pip install -e .[e2e]` and `playwright install chromium`)",
