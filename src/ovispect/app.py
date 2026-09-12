@@ -167,6 +167,9 @@ def _build_view_model(
         "total_bytes_sent_human": payload["total_bytes_sent_human"],
         "show_logout": auth_enabled,
         "username": username,
+        "quick_filters": [
+            {"label": f.label, "needle": f.needle} for f in settings.quick_filter_list
+        ],
         "geoip_attribution": get_database(settings.geoip_database_path) is not None,
     }
 

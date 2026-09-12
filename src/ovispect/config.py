@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal, Self
+from typing import Literal, NamedTuple, Self
 
 from pydantic import AnyHttpUrl, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -15,6 +15,16 @@ AuthMode = Literal["oidc", "builtin", "upstream"]
 
 _BCRYPT_HASH_RE = re.compile(r"^\$2[aby]\$\d{2}\$.{53}$")
 _MIN_SESSION_SECRET_LENGTH = 32
+_MAX_QUICK_FILTERS = 20
+_MAX_QUICK_FILTER_LABEL = 40
+_MAX_QUICK_FILTER_NEEDLE = 200
+
+
+class QuickFilter(NamedTuple):
+    """One preset filter button: the text shown and the search it applies."""
+
+    label: str
+    needle: str
 
 
 class Settings(BaseSettings):
@@ -51,6 +61,16 @@ class Settings(BaseSettings):
     )
     timezone: str = Field(default="UTC", description="IANA timezone for displayed timestamps.")
     log_level: LogLevel = Field(default="INFO", description="Application log level.")
+
+    quick_filters: str = Field(
+        default="",
+        description=(
+            "Semicolon-separated list of preset filter buttons shown next to"
+            " the search box, as `Label=needle` (or just `needle`). A needle"
+            " may hold several `|`-separated terms, matched as OR. Example:"
+            " `Desktops=desktop;Laptops=laptop;Servers=web|vps`."
+        ),
+    )
 
     bind_host: str = Field(default="0.0.0.0", description="Address the HTTP server binds to.")
     bind_port: int = Field(
@@ -127,6 +147,31 @@ class Settings(BaseSettings):
     @property
     def webhook_enabled(self) -> bool:
         return bool(self.webhook_url.strip()) and bool(self.webhook_event_kinds)
+
+    @property
+    def quick_filter_list(self) -> list[QuickFilter]:
+        """Parse :attr:`quick_filters` into ordered ``(label, needle)`` pairs.
+
+        Entries are split on ``;``. Each entry is ``Label=needle``; when the
+        ``=`` is missing the needle doubles as the label. Blank entries and
+        entries with an empty needle are dropped. Duplicated labels keep the
+        first occurrence so a typo cannot render two identical buttons.
+        """
+        result: list[QuickFilter] = []
+        seen: set[str] = set()
+        for raw in self.quick_filters.split(";"):
+            entry = raw.strip()
+            if not entry:
+                continue
+            label, sep, needle = entry.partition("=")
+            if not sep:
+                label, needle = entry, entry
+            label, needle = label.strip(), needle.strip()
+            if not needle or not label or label in seen:
+                continue
+            seen.add(label)
+            result.append(QuickFilter(label=label, needle=needle))
+        return result
 
     auth_username: str = Field(
         default="admin",
@@ -280,6 +325,23 @@ class Settings(BaseSettings):
         url = self.webhook_url.strip()
         if url and not (url.startswith("http://") or url.startswith("https://")):
             raise ValueError("WEBHOOK_URL must start with http:// or https://")
+        return self
+
+    @model_validator(mode="after")
+    def _validate_quick_filters(self) -> Self:
+        filters = self.quick_filter_list
+        if len(filters) > _MAX_QUICK_FILTERS:
+            raise ValueError(f"QUICK_FILTERS: at most {_MAX_QUICK_FILTERS} entries are allowed.")
+        for label, needle in filters:
+            if len(label) > _MAX_QUICK_FILTER_LABEL:
+                raise ValueError(
+                    f"QUICK_FILTERS: label {label!r} exceeds {_MAX_QUICK_FILTER_LABEL} characters."
+                )
+            if len(needle) > _MAX_QUICK_FILTER_NEEDLE:
+                raise ValueError(
+                    f"QUICK_FILTERS: needle for {label!r} exceeds"
+                    f" {_MAX_QUICK_FILTER_NEEDLE} characters."
+                )
         return self
 
     @model_validator(mode="after")

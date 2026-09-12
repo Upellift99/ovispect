@@ -35,6 +35,8 @@ services:
       OPENVPN_PORT: ${OPENVPN_PORT:?set OPENVPN_PORT in .env}
       OPENVPN_PASSWORD: ${OPENVPN_PASSWORD:-}
       SITE_NAME: ${SITE_NAME:-OpenVPN}
+      # Preset filter buttons, e.g. "Desktops=desktop;Laptops=laptop" (see README).
+      QUICK_FILTERS: ${QUICK_FILTERS:-}
       REFRESH_SECONDS: ${REFRESH_SECONDS:-10}
       TIMEZONE: ${TIMEZONE:-UTC}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}

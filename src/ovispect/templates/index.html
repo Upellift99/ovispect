@@ -189,6 +189,29 @@
         }
         .search-clear.hidden { display: none; }
 
+        /* Quick filters: preset search buttons configured via QUICK_FILTERS. */
+        .qf-group { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+        .qf-btn {
+            background: rgba(23, 23, 23, 0.55);
+            border: 1px solid #262626;
+            border-radius: 4px;
+            color: #a3a3a3;
+            font-family: inherit;
+            font-size: 10px;
+            line-height: 1;
+            padding: 6px 9px;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: color 120ms ease, background-color 120ms ease, border-color 120ms ease;
+        }
+        .qf-btn:hover { color: #f5f5f5; border-color: #404040; }
+        .qf-btn[aria-pressed="true"] {
+            color: #f5f5f5;
+            border-color: rgba(74, 222, 128, 0.45);
+            background-color: rgba(74, 222, 128, 0.12);
+        }
+
         /* Drawer (client details). A native <dialog>, so the UA gives us the
            focus trap, the inert background and Escape for free — hence the
            reset of its default chrome (border/padding/size/background). */
@@ -455,6 +478,13 @@
         </div>
         <span id="filter-stats" class="text-[10px] uppercase tracking-[0.12em] text-neutral-400 tabular"></span>
     </div>
+    {% if quick_filters %}
+    <div id="quick-filters" class="mt-3 qf-group" role="group" aria-label="Quick filters">
+        {% for qf in quick_filters %}
+        <button type="button" class="qf-btn" data-needle="{{ qf.needle }}" aria-pressed="false" title="Filter: {{ qf.needle }}">{{ qf.label }}</button>
+        {% endfor %}
+    </div>
+    {% endif %}
 
     <section class="mt-3 overflow-hidden rounded border border-neutral-800 bg-neutral-950/40">
         <div class="overflow-x-auto scroll-x">
@@ -565,6 +595,7 @@
     const searchClear = document.getElementById('search-clear');
     const filterStats = document.getElementById('filter-stats');
     const sortHeaders = document.querySelectorAll('th[data-sort-key]');
+    const quickFilterButtons = document.querySelectorAll('.qf-btn');
     const drawer = document.getElementById('client-drawer');
     const drawerBackdrop = document.getElementById('drawer-backdrop');
     const drawerClose = document.getElementById('drawer-close');
@@ -633,16 +664,21 @@
     }
 
     // --- Filter + sort + render -------------------------------------------
+    // A filter may hold several `|`-separated terms, matched as OR
+    // ("desktop|laptop"). Quick-filter buttons rely on this.
+    function filterTerms(value) {
+        return value.split('|').map(t => t.trim().toLowerCase()).filter(Boolean);
+    }
     function applyFilterAndSort() {
-        const needle = STATE.filter.trim().toLowerCase();
+        const terms = filterTerms(STATE.filter);
         const all = STATE.clients.concat(STATE.leaving);
         let rows = all;
-        if (needle) {
-            rows = rows.filter(c =>
+        if (terms.length) {
+            rows = rows.filter(c => terms.some(needle =>
                 c.common_name.toLowerCase().includes(needle)
                 || c.real_address_full.toLowerCase().includes(needle)
                 || c.virtual_address.toLowerCase().includes(needle)
-            );
+            ));
         }
 
         const key = STATE.sortKey;
@@ -739,7 +775,15 @@
         renderTotals(visible);
         renderFilterStats(visible);
         renderSortIndicators();
+        renderQuickFilters();
         if (drawerKey) refreshDrawerIfOpen();
+    }
+
+    function renderQuickFilters() {
+        const current = STATE.filter.trim();
+        for (const btn of quickFilterButtons) {
+            btn.setAttribute('aria-pressed', current !== '' && btn.dataset.needle === current ? 'true' : 'false');
+        }
     }
 
     // --- Header / status --------------------------------------------------
@@ -941,6 +985,19 @@
         searchInput.focus();
         render();
     });
+
+    // Quick filters: click applies the preset; clicking the active one clears.
+    for (const btn of quickFilterButtons) {
+        btn.addEventListener('click', () => {
+            const needle = btn.dataset.needle;
+            const next = STATE.filter.trim() === needle ? '' : needle;
+            searchInput.value = next;
+            STATE.filter = next;
+            savePreferences();
+            syncClearVisibility();
+            render();
+        });
+    }
 
     for (const btn of document.querySelectorAll('.fs-btn')) {
         btn.addEventListener('click', () => {

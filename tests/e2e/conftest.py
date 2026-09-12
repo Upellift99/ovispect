@@ -73,14 +73,46 @@ class _ThreadedServer(uvicorn.Server):
         return None
 
 
-def _serve(stub: Callable[..., StatusSnapshot]) -> Iterator[str]:
-    """Boot uvicorn in a daemon thread with ``fetch_status`` stubbed."""
+def _client(common_name: str, index: int) -> Client:
+    return Client(
+        common_name=common_name,
+        real_address=f"203.0.113.{index}:1194",
+        virtual_address=f"10.8.0.{index}",
+        virtual_ipv6_address="",
+        bytes_received=1024 * index,
+        bytes_sent=2048 * index,
+        connected_since="2026-01-01 00:00:00",
+        connected_since_t=int(datetime.now(tz=UTC).timestamp()) - 60,
+        username="UNDEF",
+        client_id=str(index),
+        peer_id="0",
+        data_channel_cipher="AES-256-GCM",
+    )
+
+
+QUICK_FILTER_CLIENT_CNS = ("desktop6", "laptop7", "web31")
+
+
+def _fleet_snapshot(*_args: object, **_kwargs: object) -> StatusSnapshot:
+    """Several clients whose names fall into distinct quick-filter buckets."""
+    return StatusSnapshot(
+        fetched_at=datetime.now(tz=UTC),
+        clients=[_client(cn, i + 2) for i, cn in enumerate(QUICK_FILTER_CLIENT_CNS)],
+    )
+
+
+def _serve(stub: Callable[..., StatusSnapshot], **overrides: object) -> Iterator[str]:
+    """Boot uvicorn in a daemon thread with ``fetch_status`` stubbed.
+
+    ``overrides`` are extra :class:`Settings` fields for the served app.
+    """
     settings = Settings(
         openvpn_host="127.0.0.1",
         openvpn_port=1,  # nothing listens here; fetch_status is stubbed anyway
         site_name="E2E",
         timezone="UTC",
         management_timeout_seconds=1,
+        **overrides,  # type: ignore[arg-type]
     )
     application = app_module.create_app(settings)
 
@@ -130,3 +162,12 @@ def live_server() -> Iterator[str]:
 def live_server_with_clients() -> Iterator[str]:
     """Dashboard with one connected client, so a row can be clicked open."""
     yield from _serve(_one_client_snapshot)
+
+
+@pytest.fixture(scope="session")
+def live_server_quick_filters() -> Iterator[str]:
+    """Dashboard with three clients and two QUICK_FILTERS buttons."""
+    yield from _serve(
+        _fleet_snapshot,
+        quick_filters="Workstations=desktop|laptop;Servers=web",
+    )
