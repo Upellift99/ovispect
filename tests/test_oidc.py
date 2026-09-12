@@ -10,9 +10,8 @@ from datetime import UTC, datetime
 from typing import Any, cast
 from urllib.parse import parse_qs, urlparse
 
-import httpx
+import httpx2
 import pytest
-import respx
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from joserfc import jwt
@@ -34,6 +33,110 @@ ISSUER = "https://sso.example.test/realms/ovispect"
 CLIENT_ID = "ovispect"
 CLIENT_SECRET = "topsecret"  # pragma: allowlist secret
 SESSION_SECRET = "x" * 64  # pragma: allowlist secret
+
+
+class FakeProvider:
+    """A route table served through :class:`httpx2.MockTransport`.
+
+    Replaces the global monkey-patching a mocking library would do: the
+    module under test builds its clients on ``oidc._transport_override``,
+    which the ``provider`` fixture points at this table. Every response is
+    built fresh per request, so a route can be hit any number of times.
+    """
+
+    def __init__(self) -> None:
+        self._routes: dict[tuple[str, str], tuple[int, Any, str | None]] = {}
+        self._failures: dict[tuple[str, str], Exception] = {}
+
+    def fail(self, method: str, url: str, exc: Exception) -> None:
+        """Make a route raise (e.g. ``httpx2.ConnectError``) instead of answering."""
+        self._failures[(method.upper(), url)] = exc
+
+    def get(
+        self, url: str, *, status: int = 200, json: Any = None, text: str | None = None
+    ) -> None:
+        self._routes[("GET", url)] = (status, json, text)
+
+    def post(
+        self, url: str, *, status: int = 200, json: Any = None, text: str | None = None
+    ) -> None:
+        self._routes[("POST", url)] = (status, json, text)
+
+    def handle(self, request: httpx2.Request) -> httpx2.Response:
+        key = (request.method, str(request.url).split("?", 1)[0])
+        if key in self._failures:
+            raise self._failures[key]
+        if key not in self._routes:
+            return httpx2.Response(404, text=f"no fake route for {key[0]} {key[1]}")
+        status, json, text = self._routes[key]
+        kwargs: dict[str, Any] = {}
+        if json is not None:
+            kwargs["json"] = json
+        if text is not None:
+            kwargs["text"] = text
+        return httpx2.Response(status, **kwargs)
+
+    @property
+    def transport(self) -> httpx2.MockTransport:
+        return httpx2.MockTransport(self.handle)
+
+
+@pytest.fixture
+def provider(monkeypatch: pytest.MonkeyPatch) -> FakeProvider:
+    """Route every HTTP client built by ``ovispect.oidc`` to a fake IdP."""
+    fake = FakeProvider()
+    monkeypatch.setattr(oidc_module, "_transport_override", fake.transport)
+    return fake
+
+
+async def test_client_builders_hit_the_network_when_no_override(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Without the test seam, real clients are built with the verify flag."""
+    monkeypatch.setattr(oidc_module, "_transport_override", None)
+    with oidc_module._sync_client(verify_ssl=False, timeout=1.0) as sync_client:
+        assert isinstance(sync_client, httpx2.Client)
+    async with oidc_module._async_client(verify_ssl=True, timeout=1.0) as async_client:
+        assert isinstance(async_client, httpx2.AsyncClient)
+
+
+def test_oidc_callback_token_endpoint_unreachable_renders_error(  # type: ignore[no-untyped-def]
+    oidc_app,
+) -> None:
+    """A transport error on the token endpoint is a clean 400, not a crash."""
+    application, _, provider = oidc_app
+    with TestClient(application, follow_redirects=False) as tc:
+        login = tc.get("/login")
+        state = parse_qs(urlparse(login.headers["location"]).query)["state"][0]
+        provider.fail(
+            "POST",
+            f"{ISSUER}/protocol/openid-connect/token",
+            httpx2.ConnectError("connection refused"),
+        )
+        response = tc.get("/oidc/callback", params={"code": "x", "state": state})
+    assert response.status_code == 400
+    assert "Authentication failed" in response.text
+
+
+async def test_jwks_unreachable_raises_oidc_error(  # type: ignore[no-untyped-def]
+    oidc_app,
+) -> None:
+    _, client, provider = oidc_app
+    provider.fail(
+        "GET",
+        f"{ISSUER}/protocol/openid-connect/certs",
+        httpx2.ConnectError("connection refused"),
+    )
+    with pytest.raises(OIDCError, match="jwks_unreachable"):
+        await client._get_jwks()
+
+
+def test_client_builders_use_the_override_when_set(provider: FakeProvider) -> None:
+    """With the seam set, both clients are served by the fake provider."""
+    provider.get("https://idp.example/ping", status=204)
+    with oidc_module._sync_client(verify_ssl=True, timeout=1.0) as sync_client:
+        assert sync_client.get("https://idp.example/ping").status_code == 204
+        assert sync_client.get("https://idp.example/missing").status_code == 404
 
 
 def _discovery_payload() -> dict[str, Any]:
@@ -104,10 +207,9 @@ def _settings_oidc(**overrides: Any) -> Settings:
 # ---------------------------------------------------------------------------
 
 
-@respx.mock
-def test_discover_parses_required_fields() -> None:
-    respx.get(f"{ISSUER}/.well-known/openid-configuration").mock(
-        return_value=httpx.Response(200, json=_discovery_payload())
+def test_discover_parses_required_fields(provider: FakeProvider) -> None:
+    provider.get(
+        f"{ISSUER}/.well-known/openid-configuration", status=200, json=_discovery_payload()
     )
     doc = discover(ISSUER)
     assert doc.issuer == ISSUER
@@ -117,33 +219,27 @@ def test_discover_parses_required_fields() -> None:
     assert doc.end_session_endpoint is not None
 
 
-@respx.mock
-def test_discover_raises_on_404() -> None:
-    respx.get(f"{ISSUER}/.well-known/openid-configuration").mock(return_value=httpx.Response(404))
+def test_discover_raises_on_404(provider: FakeProvider) -> None:
+    provider.get(f"{ISSUER}/.well-known/openid-configuration", status=404)
     with pytest.raises(RuntimeError, match="discovery"):
         discover(ISSUER)
 
 
-@respx.mock
-def test_discover_raises_on_missing_field() -> None:
+def test_discover_raises_on_missing_field(provider: FakeProvider) -> None:
     payload = _discovery_payload()
     del payload["jwks_uri"]
-    respx.get(f"{ISSUER}/.well-known/openid-configuration").mock(
-        return_value=httpx.Response(200, json=payload)
-    )
+    provider.get(f"{ISSUER}/.well-known/openid-configuration", status=200, json=payload)
     with pytest.raises(RuntimeError, match="jwks_uri"):
         discover(ISSUER)
 
 
-@respx.mock
-def test_init_oidc_client_returns_none_when_disabled() -> None:
+def test_init_oidc_client_returns_none_when_disabled(provider: FakeProvider) -> None:
     settings = Settings(openvpn_host="127.0.0.1", openvpn_port=5555)
     assert init_oidc_client(settings) is None
 
 
-@respx.mock
-def test_init_oidc_client_raises_when_discovery_fails() -> None:
-    respx.get(f"{ISSUER}/.well-known/openid-configuration").mock(return_value=httpx.Response(500))
+def test_init_oidc_client_raises_when_discovery_fails(provider: FakeProvider) -> None:
+    provider.get(f"{ISSUER}/.well-known/openid-configuration", status=500)
     with pytest.raises(RuntimeError, match="discovery"):
         init_oidc_client(_settings_oidc())
 
@@ -155,10 +251,11 @@ def test_init_oidc_client_raises_when_discovery_fails() -> None:
 
 @pytest.fixture
 def oidc_app(  # type: ignore[no-untyped-def]
+    provider: FakeProvider,
     monkeypatch: pytest.MonkeyPatch,
     signing_key: RSAKey,
     jwks: dict[str, Any],
-) -> Iterator[tuple[FastAPI, OIDCClient]]:
+) -> Iterator[tuple[FastAPI, OIDCClient, FakeProvider]]:
     """Build a fully-wired FastAPI app in OIDC mode with mocked discovery."""
 
     def _fake_status(*_args: Any, **_kwargs: Any) -> StatusSnapshot:
@@ -168,17 +265,14 @@ def oidc_app(  # type: ignore[no-untyped-def]
 
     settings = _settings_oidc()
 
-    with respx.mock(assert_all_called=False) as router:
-        router.get(f"{ISSUER}/.well-known/openid-configuration").mock(
-            return_value=httpx.Response(200, json=_discovery_payload())
-        )
-        router.get(f"{ISSUER}/protocol/openid-connect/certs").mock(
-            return_value=httpx.Response(200, json=jwks)
-        )
-        application = app_module.create_app(settings)
-        # Find the OIDC client we just initialised.
-        client = _find_oidc_client(application)
-        yield application, client
+    provider.get(
+        f"{ISSUER}/.well-known/openid-configuration", status=200, json=_discovery_payload()
+    )
+    provider.get(f"{ISSUER}/protocol/openid-connect/certs", status=200, json=jwks)
+    application = app_module.create_app(settings)
+    # Find the OIDC client we just initialised.
+    client = _find_oidc_client(application)
+    return application, client, provider
 
 
 def _find_oidc_client(application: FastAPI) -> OIDCClient:
@@ -202,7 +296,7 @@ def _find_oidc_client(application: FastAPI) -> OIDCClient:
 def test_login_redirects_to_authorize_endpoint(  # type: ignore[no-untyped-def]
     oidc_app,
 ) -> None:
-    application, _ = oidc_app
+    application, _, _ = oidc_app
     with TestClient(application, follow_redirects=False) as tc:
         response = tc.get("/login")
     assert response.status_code == 303
@@ -220,7 +314,7 @@ def test_login_redirects_to_authorize_endpoint(  # type: ignore[no-untyped-def]
 def test_index_redirects_to_login_when_unauthenticated_in_oidc(  # type: ignore[no-untyped-def]
     oidc_app,
 ) -> None:
-    application, _ = oidc_app
+    application, _, _ = oidc_app
     with TestClient(application, follow_redirects=False) as tc:
         response = tc.get("/")
     assert response.status_code == 303
@@ -230,7 +324,7 @@ def test_index_redirects_to_login_when_unauthenticated_in_oidc(  # type: ignore[
 def test_oidc_callback_state_mismatch_renders_error(  # type: ignore[no-untyped-def]
     oidc_app,
 ) -> None:
-    application, _ = oidc_app
+    application, _, _ = oidc_app
     with TestClient(application, follow_redirects=False) as tc:
         # Hit /login first to populate session state, then craft a bad callback.
         tc.get("/login")
@@ -242,7 +336,7 @@ def test_oidc_callback_state_mismatch_renders_error(  # type: ignore[no-untyped-
 def test_oidc_callback_provider_error_renders_error(  # type: ignore[no-untyped-def]
     oidc_app,
 ) -> None:
-    application, _ = oidc_app
+    application, _, _ = oidc_app
     with TestClient(application, follow_redirects=False) as tc:
         response = tc.get("/oidc/callback", params={"error": "access_denied"})
     assert response.status_code == 400
@@ -253,33 +347,29 @@ def test_oidc_callback_success_sets_session(  # type: ignore[no-untyped-def]
     signing_key: RSAKey,
     jwks: dict[str, Any],
 ) -> None:
-    application, _ = oidc_app
+    application, _, provider = oidc_app
     with TestClient(application, follow_redirects=False) as tc:
         login = tc.get("/login")
         location = login.headers["location"]
         state = parse_qs(urlparse(location).query)["state"][0]
 
         id_token = _make_id_token(signing_key)
-        with respx.mock(assert_all_called=False) as router:
-            router.post(f"{ISSUER}/protocol/openid-connect/token").mock(
-                return_value=httpx.Response(
-                    200,
-                    json={
-                        "access_token": "at",
-                        "refresh_token": "rt",
-                        "id_token": id_token,
-                        "expires_in": 3600,
-                        "token_type": "Bearer",
-                    },
-                )
-            )
-            router.get(f"{ISSUER}/protocol/openid-connect/certs").mock(
-                return_value=httpx.Response(200, json=jwks)
-            )
-            response = tc.get(
-                "/oidc/callback",
-                params={"code": "abc", "state": state},
-            )
+        provider.post(
+            f"{ISSUER}/protocol/openid-connect/token",
+            status=200,
+            json={
+                "access_token": "at",
+                "refresh_token": "rt",
+                "id_token": id_token,
+                "expires_in": 3600,
+                "token_type": "Bearer",
+            },
+        )
+        provider.get(f"{ISSUER}/protocol/openid-connect/certs", status=200, json=jwks)
+        response = tc.get(
+            "/oidc/callback",
+            params={"code": "abc", "state": state},
+        )
         assert response.status_code == 303, response.text
         assert response.headers["location"] == "/"
 
@@ -293,27 +383,23 @@ def test_oidc_callback_rejects_expired_id_token(  # type: ignore[no-untyped-def]
     signing_key: RSAKey,
     jwks: dict[str, Any],
 ) -> None:
-    application, _ = oidc_app
+    application, _, provider = oidc_app
     with TestClient(application, follow_redirects=False) as tc:
         login = tc.get("/login")
         state = parse_qs(urlparse(login.headers["location"]).query)["state"][0]
         expired = _make_id_token(signing_key, expires_in=-3600)
-        with respx.mock(assert_all_called=False) as router:
-            router.post(f"{ISSUER}/protocol/openid-connect/token").mock(
-                return_value=httpx.Response(
-                    200,
-                    json={
-                        "access_token": "at",
-                        "id_token": expired,
-                        "expires_in": 3600,
-                        "token_type": "Bearer",
-                    },
-                )
-            )
-            router.get(f"{ISSUER}/protocol/openid-connect/certs").mock(
-                return_value=httpx.Response(200, json=jwks)
-            )
-            response = tc.get("/oidc/callback", params={"code": "x", "state": state})
+        provider.post(
+            f"{ISSUER}/protocol/openid-connect/token",
+            status=200,
+            json={
+                "access_token": "at",
+                "id_token": expired,
+                "expires_in": 3600,
+                "token_type": "Bearer",
+            },
+        )
+        provider.get(f"{ISSUER}/protocol/openid-connect/certs", status=200, json=jwks)
+        response = tc.get("/oidc/callback", params={"code": "x", "state": state})
         assert response.status_code == 400
 
 
@@ -322,27 +408,23 @@ def test_oidc_callback_rejects_aud_mismatch(  # type: ignore[no-untyped-def]
     signing_key: RSAKey,
     jwks: dict[str, Any],
 ) -> None:
-    application, _ = oidc_app
+    application, _, provider = oidc_app
     with TestClient(application, follow_redirects=False) as tc:
         login = tc.get("/login")
         state = parse_qs(urlparse(login.headers["location"]).query)["state"][0]
         token = _make_id_token(signing_key, aud="someone-else")
-        with respx.mock(assert_all_called=False) as router:
-            router.post(f"{ISSUER}/protocol/openid-connect/token").mock(
-                return_value=httpx.Response(
-                    200,
-                    json={
-                        "access_token": "at",
-                        "id_token": token,
-                        "expires_in": 3600,
-                        "token_type": "Bearer",
-                    },
-                )
-            )
-            router.get(f"{ISSUER}/protocol/openid-connect/certs").mock(
-                return_value=httpx.Response(200, json=jwks)
-            )
-            response = tc.get("/oidc/callback", params={"code": "x", "state": state})
+        provider.post(
+            f"{ISSUER}/protocol/openid-connect/token",
+            status=200,
+            json={
+                "access_token": "at",
+                "id_token": token,
+                "expires_in": 3600,
+                "token_type": "Bearer",
+            },
+        )
+        provider.get(f"{ISSUER}/protocol/openid-connect/certs", status=200, json=jwks)
+        response = tc.get("/oidc/callback", params={"code": "x", "state": state})
         assert response.status_code == 400
 
 
@@ -352,6 +434,7 @@ def test_oidc_callback_rejects_aud_mismatch(  # type: ignore[no-untyped-def]
 
 
 def test_required_groups_grant_access(
+    provider: FakeProvider,
     monkeypatch: pytest.MonkeyPatch,
     signing_key: RSAKey,
     jwks: dict[str, Any],
@@ -365,36 +448,33 @@ def test_required_groups_grant_access(
 
     settings = _settings_oidc(oidc_required_groups="admins,vpn-monitors")
 
-    with respx.mock(assert_all_called=False) as router:
-        router.get(f"{ISSUER}/.well-known/openid-configuration").mock(
-            return_value=httpx.Response(200, json=_discovery_payload())
-        )
-        router.get(f"{ISSUER}/protocol/openid-connect/certs").mock(
-            return_value=httpx.Response(200, json=jwks)
-        )
-        application = app_module.create_app(settings)
+    provider.get(
+        f"{ISSUER}/.well-known/openid-configuration", status=200, json=_discovery_payload()
+    )
+    provider.get(f"{ISSUER}/protocol/openid-connect/certs", status=200, json=jwks)
+    application = app_module.create_app(settings)
 
-        with TestClient(application, follow_redirects=False) as tc:
-            login = tc.get("/login")
-            state = parse_qs(urlparse(login.headers["location"]).query)["state"][0]
-            token = _make_id_token(signing_key, extra={"groups": ["vpn-monitors"]})
-            router.post(f"{ISSUER}/protocol/openid-connect/token").mock(
-                return_value=httpx.Response(
-                    200,
-                    json={
-                        "access_token": "at",
-                        "id_token": token,
-                        "expires_in": 3600,
-                        "token_type": "Bearer",
-                    },
-                )
-            )
-            response = tc.get("/oidc/callback", params={"code": "x", "state": state})
-            assert response.status_code == 303
-            assert response.headers["location"] == "/"
+    with TestClient(application, follow_redirects=False) as tc:
+        login = tc.get("/login")
+        state = parse_qs(urlparse(login.headers["location"]).query)["state"][0]
+        token = _make_id_token(signing_key, extra={"groups": ["vpn-monitors"]})
+        provider.post(
+            f"{ISSUER}/protocol/openid-connect/token",
+            status=200,
+            json={
+                "access_token": "at",
+                "id_token": token,
+                "expires_in": 3600,
+                "token_type": "Bearer",
+            },
+        )
+        response = tc.get("/oidc/callback", params={"code": "x", "state": state})
+        assert response.status_code == 303
+        assert response.headers["location"] == "/"
 
 
 def test_required_groups_deny_renders_403(
+    provider: FakeProvider,
     monkeypatch: pytest.MonkeyPatch,
     signing_key: RSAKey,
     jwks: dict[str, Any],
@@ -408,34 +488,30 @@ def test_required_groups_deny_renders_403(
 
     settings = _settings_oidc(oidc_required_groups="admins")
 
-    with respx.mock(assert_all_called=False) as router:
-        router.get(f"{ISSUER}/.well-known/openid-configuration").mock(
-            return_value=httpx.Response(200, json=_discovery_payload())
-        )
-        router.get(f"{ISSUER}/protocol/openid-connect/certs").mock(
-            return_value=httpx.Response(200, json=jwks)
-        )
-        application = app_module.create_app(settings)
+    provider.get(
+        f"{ISSUER}/.well-known/openid-configuration", status=200, json=_discovery_payload()
+    )
+    provider.get(f"{ISSUER}/protocol/openid-connect/certs", status=200, json=jwks)
+    application = app_module.create_app(settings)
 
-        with TestClient(application, follow_redirects=False) as tc:
-            login = tc.get("/login")
-            state = parse_qs(urlparse(login.headers["location"]).query)["state"][0]
-            token = _make_id_token(signing_key, extra={"groups": ["users"]})
-            router.post(f"{ISSUER}/protocol/openid-connect/token").mock(
-                return_value=httpx.Response(
-                    200,
-                    json={
-                        "access_token": "at",
-                        "id_token": token,
-                        "expires_in": 3600,
-                        "token_type": "Bearer",
-                    },
-                )
-            )
-            response = tc.get("/oidc/callback", params={"code": "x", "state": state})
-            assert response.status_code == 403
-            assert "Access denied" in response.text
-            assert "admins" in response.text
+    with TestClient(application, follow_redirects=False) as tc:
+        login = tc.get("/login")
+        state = parse_qs(urlparse(login.headers["location"]).query)["state"][0]
+        token = _make_id_token(signing_key, extra={"groups": ["users"]})
+        provider.post(
+            f"{ISSUER}/protocol/openid-connect/token",
+            status=200,
+            json={
+                "access_token": "at",
+                "id_token": token,
+                "expires_in": 3600,
+                "token_type": "Bearer",
+            },
+        )
+        response = tc.get("/oidc/callback", params={"code": "x", "state": state})
+        assert response.status_code == 403
+        assert "Access denied" in response.text
+        assert "admins" in response.text
 
 
 # ---------------------------------------------------------------------------
@@ -448,26 +524,22 @@ def test_oidc_logout_redirects_to_end_session(  # type: ignore[no-untyped-def]
     signing_key: RSAKey,
     jwks: dict[str, Any],
 ) -> None:
-    application, _ = oidc_app
+    application, _, provider = oidc_app
     with TestClient(application, follow_redirects=False) as tc:
         login = tc.get("/login")
         state = parse_qs(urlparse(login.headers["location"]).query)["state"][0]
-        with respx.mock(assert_all_called=False) as router:
-            router.post(f"{ISSUER}/protocol/openid-connect/token").mock(
-                return_value=httpx.Response(
-                    200,
-                    json={
-                        "id_token": _make_id_token(signing_key),
-                        "access_token": "at",
-                        "expires_in": 3600,
-                        "token_type": "Bearer",
-                    },
-                )
-            )
-            router.get(f"{ISSUER}/protocol/openid-connect/certs").mock(
-                return_value=httpx.Response(200, json=jwks)
-            )
-            tc.get("/oidc/callback", params={"code": "x", "state": state})
+        provider.post(
+            f"{ISSUER}/protocol/openid-connect/token",
+            status=200,
+            json={
+                "id_token": _make_id_token(signing_key),
+                "access_token": "at",
+                "expires_in": 3600,
+                "token_type": "Bearer",
+            },
+        )
+        provider.get(f"{ISSUER}/protocol/openid-connect/certs", status=200, json=jwks)
+        tc.get("/oidc/callback", params={"code": "x", "state": state})
 
         logout = tc.post("/logout")
     assert logout.status_code == 303
@@ -539,32 +611,28 @@ def _capture_session(  # type: ignore[no-untyped-def]
     extra_claims: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run a successful callback and return the resulting OIDC session dict."""
-    application, _ = oidc_app
+    application, _, provider = oidc_app
     with TestClient(application, follow_redirects=False) as tc:
         login = tc.get("/login")
         state = parse_qs(urlparse(login.headers["location"]).query)["state"][0]
         token = _make_id_token(signing_key, extra=extra_claims)
-        with respx.mock(assert_all_called=False) as router:
-            router.post(f"{ISSUER}/protocol/openid-connect/token").mock(
-                return_value=httpx.Response(
-                    200,
-                    json={
-                        # The provider returns realistic, multi-KB tokens. The
-                        # whole point of the fix is that none of these end up
-                        # in the cookie.
-                        "access_token": "A" * 1500,
-                        "refresh_token": "R" * 600,
-                        "id_token": token,
-                        "expires_in": 3600,
-                        "token_type": "Bearer",
-                    },
-                )
-            )
-            router.get(f"{ISSUER}/protocol/openid-connect/certs").mock(
-                return_value=httpx.Response(200, json=jwks)
-            )
-            cb = tc.get("/oidc/callback", params={"code": "x", "state": state})
-            assert cb.status_code == 303
+        provider.post(
+            f"{ISSUER}/protocol/openid-connect/token",
+            status=200,
+            json={
+                # The provider returns realistic, multi-KB tokens. The
+                # whole point of the fix is that none of these end up
+                # in the cookie.
+                "access_token": "A" * 1500,
+                "refresh_token": "R" * 600,
+                "id_token": token,
+                "expires_in": 3600,
+                "token_type": "Bearer",
+            },
+        )
+        provider.get(f"{ISSUER}/protocol/openid-connect/certs", status=200, json=jwks)
+        cb = tc.get("/oidc/callback", params={"code": "x", "state": state})
+        assert cb.status_code == 303
         # Pull the session straight out of TestClient's cookie jar via a
         # second authenticated GET — easier than reaching into Starlette's
         # signing internals.
@@ -588,30 +656,26 @@ def test_session_size_under_limit(  # type: ignore[no-untyped-def]
     jwks: dict[str, Any],
 ) -> None:
     """The serialised session must stay well under the 4 KB browser limit."""
-    application, _ = oidc_app
+    application, _, provider = oidc_app
     with TestClient(application, follow_redirects=False) as tc:
         login = tc.get("/login")
         state = parse_qs(urlparse(login.headers["location"]).query)["state"][0]
-        with respx.mock(assert_all_called=False) as router:
-            router.post(f"{ISSUER}/protocol/openid-connect/token").mock(
-                return_value=httpx.Response(
-                    200,
-                    json={
-                        "access_token": "A" * 1800,
-                        "refresh_token": "R" * 800,
-                        "id_token": _make_id_token(
-                            signing_key,
-                            extra={"groups": ["admins", "vpn-monitors"]},
-                        ),
-                        "expires_in": 3600,
-                        "token_type": "Bearer",
-                    },
-                )
-            )
-            router.get(f"{ISSUER}/protocol/openid-connect/certs").mock(
-                return_value=httpx.Response(200, json=jwks)
-            )
-            tc.get("/oidc/callback", params={"code": "x", "state": state})
+        provider.post(
+            f"{ISSUER}/protocol/openid-connect/token",
+            status=200,
+            json={
+                "access_token": "A" * 1800,
+                "refresh_token": "R" * 800,
+                "id_token": _make_id_token(
+                    signing_key,
+                    extra={"groups": ["admins", "vpn-monitors"]},
+                ),
+                "expires_in": 3600,
+                "token_type": "Bearer",
+            },
+        )
+        provider.get(f"{ISSUER}/protocol/openid-connect/certs", status=200, json=jwks)
+        tc.get("/oidc/callback", params={"code": "x", "state": state})
         cookie = tc.cookies.get("ovispect_session")
         assert cookie is not None
     # The cookie value, post-signing, must comfortably fit in the recommended
@@ -652,8 +716,8 @@ def test_session_contains_user_identity(  # type: ignore[no-untyped-def]
     assert user["groups"] == ["vpn-monitors"]
 
 
-@respx.mock
 def test_oidc_callback_rejects_iss_mismatch(  # type: ignore[no-untyped-def]
+    provider: FakeProvider,
     monkeypatch: pytest.MonkeyPatch,
     signing_key: RSAKey,
     jwks: dict[str, Any],
@@ -666,35 +730,32 @@ def test_oidc_callback_rejects_iss_mismatch(  # type: ignore[no-untyped-def]
     )
 
     settings = _settings_oidc()
-    respx.get(f"{ISSUER}/.well-known/openid-configuration").mock(
-        return_value=httpx.Response(200, json=_discovery_payload())
+    provider.get(
+        f"{ISSUER}/.well-known/openid-configuration", status=200, json=_discovery_payload()
     )
-    respx.get(f"{ISSUER}/protocol/openid-connect/certs").mock(
-        return_value=httpx.Response(200, json=jwks)
-    )
+    provider.get(f"{ISSUER}/protocol/openid-connect/certs", status=200, json=jwks)
     application = app_module.create_app(settings)
 
     with TestClient(application, follow_redirects=False) as tc:
         login = tc.get("/login")
         state = parse_qs(urlparse(login.headers["location"]).query)["state"][0]
         bad_token = _make_id_token(signing_key, iss="https://attacker.example/realm")
-        respx.post(f"{ISSUER}/protocol/openid-connect/token").mock(
-            return_value=httpx.Response(
-                200,
-                json={
-                    "access_token": "at",
-                    "id_token": bad_token,
-                    "expires_in": 3600,
-                    "token_type": "Bearer",
-                },
-            )
+        provider.post(
+            f"{ISSUER}/protocol/openid-connect/token",
+            status=200,
+            json={
+                "access_token": "at",
+                "id_token": bad_token,
+                "expires_in": 3600,
+                "token_type": "Bearer",
+            },
         )
         response = tc.get("/oidc/callback", params={"code": "x", "state": state})
         assert response.status_code == 400
 
 
-@respx.mock
 def test_oidc_token_endpoint_failure_renders_error(  # type: ignore[no-untyped-def]
+    provider: FakeProvider,
     monkeypatch: pytest.MonkeyPatch,
     jwks: dict[str, Any],
 ) -> None:
@@ -706,20 +767,16 @@ def test_oidc_token_endpoint_failure_renders_error(  # type: ignore[no-untyped-d
     )
 
     settings = _settings_oidc()
-    respx.get(f"{ISSUER}/.well-known/openid-configuration").mock(
-        return_value=httpx.Response(200, json=_discovery_payload())
+    provider.get(
+        f"{ISSUER}/.well-known/openid-configuration", status=200, json=_discovery_payload()
     )
-    respx.get(f"{ISSUER}/protocol/openid-connect/certs").mock(
-        return_value=httpx.Response(200, json=jwks)
-    )
+    provider.get(f"{ISSUER}/protocol/openid-connect/certs", status=200, json=jwks)
     application = app_module.create_app(settings)
 
     with TestClient(application, follow_redirects=False) as tc:
         login = tc.get("/login")
         state = parse_qs(urlparse(login.headers["location"]).query)["state"][0]
-        respx.post(f"{ISSUER}/protocol/openid-connect/token").mock(
-            return_value=httpx.Response(500, text="boom")
-        )
+        provider.post(f"{ISSUER}/protocol/openid-connect/token", status=500, text="boom")
         response = tc.get("/oidc/callback", params={"code": "x", "state": state})
         assert response.status_code == 400
         assert "Authentication failed" in response.text

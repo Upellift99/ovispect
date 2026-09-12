@@ -9,7 +9,7 @@ import json
 from datetime import UTC, datetime
 from typing import Any
 
-import httpx
+import httpx2
 import pytest
 
 from ovispect.config import Settings
@@ -119,14 +119,14 @@ def test_sign_body_returns_sha256_hmac() -> None:
 
 
 async def test_notifier_posts_to_url() -> None:
-    captured: list[httpx.Request] = []
+    captured: list[httpx2.Request] = []
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         captured.append(request)
-        return httpx.Response(204)
+        return httpx2.Response(204)
 
-    transport = httpx.MockTransport(handler)
-    async with httpx.AsyncClient(transport=transport) as client:
+    transport = httpx2.MockTransport(handler)
+    async with httpx2.AsyncClient(transport=transport) as client:
         notifier = WebhookNotifier(_settings(), http_client=client)
         ok = await notifier.send(_event())
         assert ok is True
@@ -137,16 +137,16 @@ async def test_notifier_posts_to_url() -> None:
 
 
 async def test_notifier_signs_when_secret_set() -> None:
-    captured: list[httpx.Request] = []
+    captured: list[httpx2.Request] = []
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         captured.append(request)
-        return httpx.Response(200)
+        return httpx2.Response(200)
 
-    transport = httpx.MockTransport(handler)
+    transport = httpx2.MockTransport(handler)
     secret = "topsecret"  # pragma: allowlist secret
     settings = _settings(webhook_secret=secret)
-    async with httpx.AsyncClient(transport=transport) as client:
+    async with httpx2.AsyncClient(transport=transport) as client:
         notifier = WebhookNotifier(settings, http_client=client)
         await notifier.send(_event())
 
@@ -162,19 +162,44 @@ async def test_notifier_retries_on_5xx_then_succeeds(
 ) -> None:
     attempts = {"n": 0}
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         attempts["n"] += 1
         if attempts["n"] < 2:
-            return httpx.Response(503)
-        return httpx.Response(200)
+            return httpx2.Response(503)
+        return httpx2.Response(200)
 
     async def _no_sleep(_seconds: float) -> None:
         return None
 
     monkeypatch.setattr(asyncio, "sleep", _no_sleep)
 
-    transport = httpx.MockTransport(handler)
-    async with httpx.AsyncClient(transport=transport) as client:
+    transport = httpx2.MockTransport(handler)
+    async with httpx2.AsyncClient(transport=transport) as client:
+        notifier = WebhookNotifier(_settings(), http_client=client)
+        ok = await notifier.send(_event())
+        assert ok is True
+    assert attempts["n"] == 2
+
+
+async def test_notifier_retries_on_transport_error_then_succeeds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A connection error counts as a failed attempt and is retried."""
+    attempts = {"n": 0}
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        attempts["n"] += 1
+        if attempts["n"] < 2:
+            raise httpx2.ConnectError("connection refused")
+        return httpx2.Response(200)
+
+    async def _no_sleep(_seconds: float) -> None:
+        return None
+
+    monkeypatch.setattr(asyncio, "sleep", _no_sleep)
+
+    transport = httpx2.MockTransport(handler)
+    async with httpx2.AsyncClient(transport=transport) as client:
         notifier = WebhookNotifier(_settings(), http_client=client)
         ok = await notifier.send(_event())
         assert ok is True
@@ -184,12 +209,12 @@ async def test_notifier_retries_on_5xx_then_succeeds(
 async def test_notifier_does_not_retry_on_4xx() -> None:
     attempts = {"n": 0}
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         attempts["n"] += 1
-        return httpx.Response(404)
+        return httpx2.Response(404)
 
-    transport = httpx.MockTransport(handler)
-    async with httpx.AsyncClient(transport=transport) as client:
+    transport = httpx2.MockTransport(handler)
+    async with httpx2.AsyncClient(transport=transport) as client:
         notifier = WebhookNotifier(_settings(webhook_max_retries=5), http_client=client)
         ok = await notifier.send(_event())
         assert ok is False
@@ -197,15 +222,15 @@ async def test_notifier_does_not_retry_on_4xx() -> None:
 
 
 async def test_notifier_includes_country_in_slack_text() -> None:
-    captured: list[httpx.Request] = []
+    captured: list[httpx2.Request] = []
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         captured.append(request)
-        return httpx.Response(200)
+        return httpx2.Response(200)
 
-    transport = httpx.MockTransport(handler)
+    transport = httpx2.MockTransport(handler)
     settings = _settings(webhook_format="slack")
-    async with httpx.AsyncClient(transport=transport) as client:
+    async with httpx2.AsyncClient(transport=transport) as client:
         notifier = WebhookNotifier(settings, country_for_ip=lambda _: "FR", http_client=client)
         await notifier.send(_event())
     body = json.loads(captured[0].content)
