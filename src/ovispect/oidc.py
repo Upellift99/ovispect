@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from typing import Any, cast
 from urllib.parse import urlencode
 
-import httpx
+import httpx2
 from fastapi import HTTPException, Request
 from joserfc import jwt
 from joserfc.errors import JoseError
@@ -100,6 +100,27 @@ class DiscoveryDocument:
     end_session_endpoint: str | None = None
 
 
+# Test seam. When set, every HTTP client built by this module talks to this
+# transport instead of the network — a :class:`httpx2.MockTransport` serves
+# both the sync client used by :func:`discover` and the async client used by
+# :class:`OIDCClient`. Tests set it through ``monkeypatch``; production never
+# touches it. This replaces the global monkey-patching a mocking library
+# would do, with no third-party dependency.
+_transport_override: httpx2.MockTransport | None = None
+
+
+def _sync_client(*, verify_ssl: bool, timeout: float) -> httpx2.Client:
+    if _transport_override is not None:
+        return httpx2.Client(transport=_transport_override, timeout=timeout)
+    return httpx2.Client(verify=verify_ssl, timeout=timeout)
+
+
+def _async_client(*, verify_ssl: bool, timeout: float) -> httpx2.AsyncClient:
+    if _transport_override is not None:
+        return httpx2.AsyncClient(transport=_transport_override, timeout=timeout)
+    return httpx2.AsyncClient(verify=verify_ssl, timeout=timeout)
+
+
 def discover(
     issuer_url: str,
     *,
@@ -115,11 +136,11 @@ def discover(
     base = issuer_url.rstrip("/")
     url = base + DISCOVERY_PATH
     try:
-        with httpx.Client(verify=verify_ssl, timeout=timeout) as client:
+        with _sync_client(verify_ssl=verify_ssl, timeout=timeout) as client:
             response = client.get(url)
             response.raise_for_status()
             data = response.json()
-    except httpx.HTTPError as exc:
+    except httpx2.HTTPError as exc:
         raise RuntimeError(f"OIDC discovery request to {url} failed: {exc}") from exc
     except ValueError as exc:
         raise RuntimeError(f"OIDC discovery at {url} returned non-JSON body: {exc}") from exc
@@ -137,7 +158,7 @@ def discover(
     )
 
 
-HttpClientFactory = Callable[[], httpx.AsyncClient]
+HttpClientFactory = Callable[[], httpx2.AsyncClient]
 
 
 class OIDCClient:
@@ -162,9 +183,9 @@ class OIDCClient:
             http_client_factory if http_client_factory is not None else self._default_client
         )
 
-    def _default_client(self) -> httpx.AsyncClient:
-        return httpx.AsyncClient(
-            verify=self._settings.oidc_verify_ssl,
+    def _default_client(self) -> httpx2.AsyncClient:
+        return _async_client(
+            verify_ssl=self._settings.oidc_verify_ssl,
             timeout=_HTTP_TIMEOUT_SECONDS,
         )
 
@@ -297,7 +318,7 @@ class OIDCClient:
         try:
             async with self._http_client_factory() as client:
                 response = await client.post(self._discovery.token_endpoint, data=data)
-        except httpx.HTTPError as exc:
+        except httpx2.HTTPError as exc:
             logger.warning("oidc token endpoint request failed: %s", exc)
             raise OIDCError("token_endpoint_unreachable") from exc
         if response.status_code != 200:
@@ -350,7 +371,7 @@ class OIDCClient:
                 response = await client.get(self._discovery.jwks_uri)
                 response.raise_for_status()
                 payload = response.json()
-        except httpx.HTTPError as exc:
+        except httpx2.HTTPError as exc:
             raise OIDCError("jwks_unreachable") from exc
         except ValueError as exc:
             raise OIDCError("jwks_non_json") from exc

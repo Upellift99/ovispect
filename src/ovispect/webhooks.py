@@ -1,6 +1,6 @@
 """Webhook delivery for connect/disconnect events.
 
-A :class:`WebhookNotifier` wraps an :mod:`httpx` async client, formats a
+A :class:`WebhookNotifier` wraps an :mod:`httpx2` async client, formats a
 :class:`~ovispect.events.ClientEvent` for the configured target
 (generic JSON, Slack, Discord, or Gotify), optionally signs the body
 with HMAC-SHA256, and POSTs it with bounded retries.
@@ -16,7 +16,7 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
-import httpx
+import httpx2
 
 from ovispect.config import Settings
 from ovispect.events import ClientEvent
@@ -109,19 +109,19 @@ def sign_body(body: bytes, secret: str) -> str:
 
 
 class WebhookNotifier:
-    """Async webhook sender. Owns its :class:`httpx.AsyncClient`."""
+    """Async webhook sender. Owns its :class:`httpx2.AsyncClient`."""
 
     def __init__(
         self,
         settings: Settings,
         *,
         country_for_ip: CountryLookup | None = None,
-        http_client: httpx.AsyncClient | None = None,
+        http_client: httpx2.AsyncClient | None = None,
     ) -> None:
         self._settings = settings
         self._country_for_ip = country_for_ip
         self._owns_client = http_client is None
-        self._client = http_client or httpx.AsyncClient(
+        self._client = http_client or httpx2.AsyncClient(
             timeout=settings.webhook_timeout_seconds,
         )
 
@@ -156,7 +156,7 @@ class WebhookNotifier:
         for attempt in range(cfg.webhook_max_retries):
             try:
                 response = await self._client.post(url, content=body, headers=headers)
-            except httpx.HTTPError as exc:
+            except httpx2.HTTPError as exc:
                 last_error = f"{type(exc).__name__}: {exc}"
                 logger.warning(
                     "webhook attempt %d/%d failed: %s",
