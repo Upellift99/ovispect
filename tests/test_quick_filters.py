@@ -66,7 +66,7 @@ def test_index_renders_quick_filter_buttons(monkeypatch: pytest.MonkeyPatch) -> 
     assert ">Both</button>" in body
     # Needles and labels are HTML-escaped by the template engine.
     assert 'data-needle="&#34;&lt;b&gt;"' in body
-    assert "<b>" not in body.split('id="quick-filters"')[1].split("</div>")[0]
+    assert "<b>" not in body.split('id="quick-filters"')[1].split("</fieldset>")[0]
 
 
 def test_index_omits_quick_filters_block_when_unset(monkeypatch: pytest.MonkeyPatch) -> None:
