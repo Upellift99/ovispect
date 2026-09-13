@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0](https://github.com/Upellift99/ovispect/compare/v0.9.0...v0.10.0) (2026-09-13)
+
+
+### Added
+
+* **ui:** add favicon and iOS home-screen icon ([#32](https://github.com/Upellift99/ovispect/issues/32)) ([628a098](https://github.com/Upellift99/ovispect/commit/628a09842d1fc2e496b8af25a9cb619203928aa8))
+* **ui:** show connection duration on mobile ([#29](https://github.com/Upellift99/ovispect/issues/29)) ([9fd9463](https://github.com/Upellift99/ovispect/commit/9fd94636df13c5ff92af031b095e7aabe101af4d))
+
+
+### Fixed
+
+* **sonar:** use &lt;fieldset&gt; instead of role="group" for quick filters (S6819) ([#31](https://github.com/Upellift99/ovispect/issues/31)) ([4270a83](https://github.com/Upellift99/ovispect/commit/4270a8381d4ba4d5104f16fe19e88517bee24f00))
+
 ## [0.9.0](https://github.com/Upellift99/ovispect/compare/v0.8.7...v0.9.0) (2026-09-12)
 
 
