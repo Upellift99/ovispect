@@ -304,21 +304,25 @@
 
             table.responsive tbody tr {
                 display: grid;
-                grid-template-columns: minmax(0, 1fr) auto;
+                /* Address shrinks (ellipsis) only when it has to; the duration
+                   hugs it on the left and the remaining space pads before TX. */
+                grid-template-columns: minmax(0, max-content) minmax(0, 1fr) auto;
                 grid-template-areas:
-                    "name rx"
-                    "addr tx";
+                    "name name rx"
+                    "addr conn tx";
                 column-gap: 12px;
                 row-gap: 2px;
                 padding: 10px 12px;
                 align-items: baseline;
             }
-            /* Promote only the four visible cells to grid items. Cells 3
-               (virtual) and 6 (connected) keep their `hidden` display:none. */
+            /* Promote the five cells shown on phones to grid items. Cell 3
+               (virtual) keeps its `hidden` display:none; cell 6 (connected)
+               overrides it so the session duration sits next to the address. */
             table.responsive tbody tr > td:nth-child(1),
             table.responsive tbody tr > td:nth-child(2),
             table.responsive tbody tr > td:nth-child(4),
-            table.responsive tbody tr > td:nth-child(5) {
+            table.responsive tbody tr > td:nth-child(5),
+            table.responsive tbody tr > td:nth-child(6) {
                 display: block;
                 padding: 0;
                 border: 0;
@@ -339,16 +343,32 @@
                 font-size: 11px;
                 color: #a3a3a3;
             }
-            table.responsive tbody td:nth-child(4) {
-                grid-area: rx;
-                text-align: right;
+            table.responsive tbody td:nth-child(6) {
+                grid-area: conn;
+                min-width: 0;
+                overflow: hidden;
+                text-overflow: ellipsis;
                 white-space: nowrap;
+                text-align: left; /* the desktop column is right-aligned */
+                font-size: 13px;
+                color: #d4d4d4;
             }
+            table.responsive tbody td:nth-child(6)::before {
+                content: '\00b7';
+                margin-right: 6px;
+                color: #525252;
+            }
+            /* Traffic volumes are secondary on a phone: smaller and dimmer,
+               so the name and the session duration carry the row. */
+            table.responsive tbody td:nth-child(4),
             table.responsive tbody td:nth-child(5) {
-                grid-area: tx;
                 text-align: right;
                 white-space: nowrap;
+                font-size: 12px;
+                color: #a3a3a3;
             }
+            table.responsive tbody td:nth-child(4) { grid-area: rx; }
+            table.responsive tbody td:nth-child(5) { grid-area: tx; }
             table.responsive tbody td:nth-child(4)::before,
             table.responsive tbody td:nth-child(5)::before {
                 color: #525252;
@@ -510,7 +530,7 @@
                     {% if rows %}
                         {% for row in rows %}
                         <tr class="border-b border-neutral-900 last:border-b-0">
-                            <td class="px-3 sm:px-4 py-2 sm:py-2.5 text-neutral-100 break-all">{{ row.common_name }}<span class="block sm:hidden mt-0.5 text-[11px] text-neutral-500 tabular" title="{{ row.connected_absolute }}">{{ row.connected_relative }}</span></td>
+                            <td class="px-3 sm:px-4 py-2 sm:py-2.5 text-neutral-100 break-all">{{ row.common_name }}</td>
                             <td class="px-3 sm:px-4 py-2 sm:py-2.5 text-neutral-300 tabular" title="{{ row.real_address_full }}">{% if row.country_flag %}<span class="country-flag" title="{{ row.country_code }}">{{ row.country_flag }}</span>{% endif %}{{ row.real_address_short }}</td>
                             <td class="hidden sm:table-cell px-3 sm:px-4 py-2 sm:py-2.5 text-neutral-400 tabular">{{ row.virtual_address }}</td>
                             <td class="px-3 sm:px-4 py-2 sm:py-2.5 text-right text-neutral-200 tabular">{{ row.bytes_received_human }}</td>
@@ -728,7 +748,7 @@
                 : '';
             return `
             <tr class="${cls}" data-row-key="${escapeHtml(keyOf(c))}">
-                <td class="px-3 sm:px-4 py-2 sm:py-2.5 text-neutral-100 break-all">${escapeHtml(c.common_name)}<span class="block sm:hidden mt-0.5 text-[11px] text-neutral-500 tabular" title="${escapeHtml(c.connected_absolute)}">${escapeHtml(c.connected_relative)}</span></td>
+                <td class="px-3 sm:px-4 py-2 sm:py-2.5 text-neutral-100 break-all">${escapeHtml(c.common_name)}</td>
                 <td class="px-3 sm:px-4 py-2 sm:py-2.5 text-neutral-300 tabular" title="${escapeHtml(c.real_address_full)}">${flag}${escapeHtml(c.real_address_short)}</td>
                 <td class="hidden sm:table-cell px-3 sm:px-4 py-2 sm:py-2.5 text-neutral-400 tabular">${escapeHtml(c.virtual_address)}</td>
                 <td class="px-3 sm:px-4 py-2 sm:py-2.5 text-right text-neutral-200 tabular">${escapeHtml(c.bytes_received_human)}</td>
