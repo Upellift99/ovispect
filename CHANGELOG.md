@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.1](https://github.com/Upellift99/ovispect/compare/v0.10.0...v0.10.1) (2026-09-13)
+
+
+### Fixed
+
+* **ui:** keep mobile rows at two lines with the session duration inline ([#33](https://github.com/Upellift99/ovispect/issues/33)) ([5d455a2](https://github.com/Upellift99/ovispect/commit/5d455a2fd57f8b34c23fb3cb5c6f72cc1db2695d))
+
 ## [0.10.0](https://github.com/Upellift99/ovispect/compare/v0.9.0...v0.10.0) (2026-09-13)
 
 
