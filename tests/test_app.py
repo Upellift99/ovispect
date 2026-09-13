@@ -95,6 +95,28 @@ def test_index_renders_clients(client_factory) -> None:  # type: ignore[no-untyp
     assert "7.3 MB" in body
 
 
+def test_index_declares_home_screen_icons(client_factory) -> None:  # type: ignore[no-untyped-def]
+    """iOS "Add to Home Screen" reads apple-touch-icon and the app title from the page head."""
+    snapshot = StatusSnapshot(fetched_at=datetime.now(tz=UTC), clients=[])
+    with client_factory(snapshot) as client:
+        body = client.get("/").text
+        icons = {
+            path: client.get(path)
+            for path in (
+                "/static/apple-touch-icon.png",
+                "/static/favicon-32.png",
+                "/static/icon-512.png",
+            )
+        }
+    assert 'rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png"' in body
+    assert '<meta name="apple-mobile-web-app-title" content="Test VPN">' in body
+    assert 'rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png"' in body
+    for path, response in icons.items():
+        assert response.status_code == 200, path
+        assert response.headers["content-type"] == "image/png", path
+        assert response.content.startswith(b"\x89PNG"), path
+
+
 def test_api_clients_returns_json_payload(client_factory) -> None:  # type: ignore[no-untyped-def]
     snapshot = StatusSnapshot(fetched_at=datetime.now(tz=UTC), clients=_sample_clients())
     with client_factory(snapshot) as client:
@@ -265,6 +287,8 @@ def test_login_form_renders(client_with_auth) -> None:  # type: ignore[no-untype
     assert response.status_code == 200
     assert "Sign in" in response.text
     assert 'name="password"' in response.text
+    # The shortcut may be added from the login page, so it carries the icon too.
+    assert 'rel="apple-touch-icon"' in response.text
 
 
 def test_login_submit_with_correct_credentials_sets_session(client_with_auth) -> None:  # type: ignore[no-untyped-def]
