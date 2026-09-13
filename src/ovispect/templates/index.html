@@ -503,7 +503,7 @@
                     {% if rows %}
                         {% for row in rows %}
                         <tr class="border-b border-neutral-900 last:border-b-0">
-                            <td class="px-3 sm:px-4 py-2 sm:py-2.5 text-neutral-100 break-all">{{ row.common_name }}</td>
+                            <td class="px-3 sm:px-4 py-2 sm:py-2.5 text-neutral-100 break-all">{{ row.common_name }}<span class="block sm:hidden mt-0.5 text-[11px] text-neutral-500 tabular" title="{{ row.connected_absolute }}">{{ row.connected_relative }}</span></td>
                             <td class="px-3 sm:px-4 py-2 sm:py-2.5 text-neutral-300 tabular" title="{{ row.real_address_full }}">{% if row.country_flag %}<span class="country-flag" title="{{ row.country_code }}">{{ row.country_flag }}</span>{% endif %}{{ row.real_address_short }}</td>
                             <td class="hidden sm:table-cell px-3 sm:px-4 py-2 sm:py-2.5 text-neutral-400 tabular">{{ row.virtual_address }}</td>
                             <td class="px-3 sm:px-4 py-2 sm:py-2.5 text-right text-neutral-200 tabular">{{ row.bytes_received_human }}</td>
@@ -721,7 +721,7 @@
                 : '';
             return `
             <tr class="${cls}" data-row-key="${escapeHtml(keyOf(c))}">
-                <td class="px-3 sm:px-4 py-2 sm:py-2.5 text-neutral-100 break-all">${escapeHtml(c.common_name)}</td>
+                <td class="px-3 sm:px-4 py-2 sm:py-2.5 text-neutral-100 break-all">${escapeHtml(c.common_name)}<span class="block sm:hidden mt-0.5 text-[11px] text-neutral-500 tabular" title="${escapeHtml(c.connected_absolute)}">${escapeHtml(c.connected_relative)}</span></td>
                 <td class="px-3 sm:px-4 py-2 sm:py-2.5 text-neutral-300 tabular" title="${escapeHtml(c.real_address_full)}">${flag}${escapeHtml(c.real_address_short)}</td>
                 <td class="hidden sm:table-cell px-3 sm:px-4 py-2 sm:py-2.5 text-neutral-400 tabular">${escapeHtml(c.virtual_address)}</td>
                 <td class="px-3 sm:px-4 py-2 sm:py-2.5 text-right text-neutral-200 tabular">${escapeHtml(c.bytes_received_human)}</td>
