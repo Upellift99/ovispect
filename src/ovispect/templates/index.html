@@ -190,7 +190,8 @@
         .search-clear.hidden { display: none; }
 
         /* Quick filters: preset search buttons configured via QUICK_FILTERS. */
-        .qf-group { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+        /* <fieldset> carries the group semantics natively; undo its UA chrome. */
+        .qf-group { display: inline-flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; border: 0; min-inline-size: 0; }
         .qf-btn {
             background: rgba(23, 23, 23, 0.55);
             border: 1px solid #262626;
@@ -479,11 +480,12 @@
         <span id="filter-stats" class="text-[10px] uppercase tracking-[0.12em] text-neutral-400 tabular"></span>
     </div>
     {% if quick_filters %}
-    <div id="quick-filters" class="mt-3 qf-group" role="group" aria-label="Quick filters">
+    <fieldset id="quick-filters" class="mt-3 qf-group">
+        <legend class="sr-only">Quick filters</legend>
         {% for qf in quick_filters %}
         <button type="button" class="qf-btn" data-needle="{{ qf.needle }}" aria-pressed="false" title="Filter: {{ qf.needle }}">{{ qf.label }}</button>
         {% endfor %}
-    </div>
+    </fieldset>
     {% endif %}
 
     <section class="mt-3 overflow-hidden rounded border border-neutral-800 bg-neutral-950/40">
